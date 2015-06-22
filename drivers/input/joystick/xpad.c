@@ -906,7 +906,6 @@ struct xpad_led {
 };
 
 /**
- * set the LEDs on Xbox360 / Wireless Controllers
  * @param command
  *  0: off
  *  1: all blink, then previous setting
