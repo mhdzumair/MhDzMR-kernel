@@ -69,6 +69,12 @@ struct of_device_id touch_of_match[] = {
 };
 EXPORT_SYMBOL(touch_of_match);
 
+#ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
+extern bool smartwake_switch;
+bool display_off;
+EXPORT_SYMBOL(display_off);
+#endif
+
 void tpd_get_dts_info(void)
 {
 	struct device_node *node1 = NULL;
@@ -365,6 +371,9 @@ static void touch_resume_workqueue_callback(struct work_struct *work)
 	TPD_DEBUG("GTP touch_resume_workqueue_callback\n");
 	g_tpd_drv->resume(NULL);
 	tpd_suspend_flag = 0;
+#ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
+	display_off = false;
+#endif
 }
 static int tpd_fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
 {
@@ -383,17 +392,28 @@ static int tpd_fb_notifier_callback(struct notifier_block *self, unsigned long e
 			if (blank != FB_BLANK_POWERDOWN)
 				return 0;
 			TPD_DMESG("LCD OFF Notify\n");
-			if (g_tpd_drv && !tpd_suspend_flag) {
+#ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
+			if (g_tpd_drv && (!tpd_suspend_flag || !smartwake_switch)) {
+#else
+                        if ((g_tpd_drv && !tpd_suspend_flag){
+#endif
 				err = cancel_work_sync(&touch_resume_work);
 				if (!err)
 					TPD_DMESG("cancel touch_resume_workqueue err = %d\n", err);
 				g_tpd_drv->suspend(NULL);
 			}
 			tpd_suspend_flag = 1;
+#ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
+			display_off = true;
+#endif
 		} else if (blank == FB_BLANK_UNBLANK ||
 			(blank == FB_BLANK_NORMAL && tpd_suspend_flag)) {
 			TPD_DMESG("LCD ON Notify\n");
+#ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
+                        if (g_tpd_drv && (tpd_suspend_flag || smartwake_switch)) {
+#else
 			if (g_tpd_drv && tpd_suspend_flag) {
+#endif
 				err = queue_work(touch_resume_workqueue, &touch_resume_work);
 				if (!err) {
 					TPD_DMESG("start touch_resume_workqueue failed\n");

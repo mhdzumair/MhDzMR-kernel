@@ -65,3 +65,4 @@ obj-$(CONFIG_MOT_UTAG) += utag/
 #Lenovo-sw quebs2 added 20150510 begin,support efuse check with sbc flag
 obj-$(CONFIG_EFUSE_SBC_CHECK) += efusecheck/
 #Lenovo-sw quebs2 added 20150510 end,support efuse check with sbc flag
+obj-$(CONFIG_POCKETMOD)		+= pocket_mod.o
