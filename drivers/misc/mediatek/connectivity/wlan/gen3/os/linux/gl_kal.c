@@ -105,16 +105,6 @@ static mm_segment_t orgfs;
 static PUINT_8 apucFwPath[] = {
 	(PUINT_8) "/storage/sdcard0/",
 	(PUINT_8) "/vendor/firmware/",
-#if !CONFIG_ANDROID
-	(PUINT_8) "/lib/firmware/",
-#endif
-	NULL
-};
-
-#if defined(MT6797)
-
-static PUINT_8 apucFwName[] = {
-	(PUINT_8) CFG_FW_FILENAME "_6797",
 	NULL
 };
 
