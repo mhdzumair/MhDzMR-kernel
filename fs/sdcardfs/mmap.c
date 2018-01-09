@@ -80,8 +80,7 @@ static ssize_t sdcardfs_direct_IO(int rw, struct kiocb *iocb,
      * NOTE: exceptionally, on the recent kernels (since Linux 3.8.x),
      * swap_writepage invokes this function directly.
 	 */
-	printk(KERN_INFO "%s, operation is not supported\n", __func__);
-	return 0;
+	return -EINVAL;
 }
 
 /*
@@ -90,7 +89,6 @@ static ssize_t sdcardfs_direct_IO(int rw, struct kiocb *iocb,
  * the a_ops vector to be non-NULL.
  */
 const struct address_space_operations sdcardfs_aops = {
-	/* empty on purpose */
 	.direct_IO	= sdcardfs_direct_IO,
 };
 
