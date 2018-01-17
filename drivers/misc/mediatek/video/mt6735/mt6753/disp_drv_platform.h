@@ -57,7 +57,12 @@
 /**
  * ESD recovery support.
  */
-#define MTK_FB_ESD_ENABLE
+//#define MTK_FB_ESD_ENABLE
+
+/**
+* PullClk support
+*/
+/*#define MTK_FB_PULLCLK_ENABLE*/
 
 /**
  * FB Ion support.
@@ -150,9 +155,9 @@
 #define PRIMARY_DISPLAY_HW_OVERLAY_CASCADE_COUNT	(1)
 #endif
 #define PRIMARY_DISPLAY_SESSION_LAYER_COUNT	(PRIMARY_DISPLAY_HW_OVERLAY_LAYER_NUMBER *	\
-							 PRIMARY_DISPLAY_HW_OVERLAY_CASCADE_COUNT)
+							PRIMARY_DISPLAY_HW_OVERLAY_CASCADE_COUNT)
 #define EXTERNAL_DISPLAY_SESSION_LAYER_COUNT	(PRIMARY_DISPLAY_HW_OVERLAY_LAYER_NUMBER *	\
-							 PRIMARY_DISPLAY_HW_OVERLAY_CASCADE_COUNT)
+							PRIMARY_DISPLAY_HW_OVERLAY_CASCADE_COUNT)
 #define DISP_SESSION_OVL_TIMELINE_ID(x)		(x)
 /* #define DISP_SESSION_OUTPUT_TIMELINE_ID       (PRIMARY_DISPLAY_SESSION_LAYER_COUNT) */
 /* #define DISP_SESSION_PRESENT_TIMELINE_ID      (PRIMARY_DISPLAY_SESSION_LAYER_COUNT+1) */
@@ -175,9 +180,24 @@ typedef enum {
 /* #define FORCE_SODI_BY_SW */
 
 /**
+ * Support OVL1 engine.
+ */
+#define MTK_FB_OVL1_SUPPORT
+
+/**
  * Support RDMA1 engine.
  */
-/* #define MTK_FB_RDMA1_SUPPORT */
+#define MTK_FB_RDMA1_SUPPORT
+
+/**
+ * Support manual control MUTEX HW_DCM
+ */
+#define MANUAL_MUTEX_HW_DCM
+
+/**
+ * Support OD engine.
+ */
+/* #define MTK_FB_OD_SUPPORT */
 
 /**
  * The maximum compose layer OVL can support in one pass.
@@ -197,12 +217,13 @@ typedef enum {
  * HW_PASS_MODE: Multi-Pass, Single-Pass.
  */
 #ifdef CONFIG_MTK_GMO_RAM_OPTIMIZE
-	#define DISP_HW_MODE_CAP DISP_OUTPUT_CAP_DIRECT_LINK
+	#define DISP_HW_MODE_CAP DISP_OUTPUT_CAP_SWITCHABLE
 	#define DISP_HW_PASS_MODE DISP_OUTPUT_CAP_SINGLE_PASS
 
 	#ifdef OVL_TIME_SHARING
 	#undef OVL_TIME_SHARING
 	#endif
+
 	#define DISP_INTERNAL_BUFFER_COUNT 1
 #else
 	#define DISP_HW_MODE_CAP DISP_OUTPUT_CAP_SWITCHABLE
@@ -211,14 +232,15 @@ typedef enum {
 	#else
 		#define DISP_HW_PASS_MODE DISP_OUTPUT_CAP_SINGLE_PASS
 	#endif
+
 	#define DISP_INTERNAL_BUFFER_COUNT 3
 #endif
-#ifndef CONFIG_SINGLE_PANEL_OUTPUT
+
 /**
  * DISP_NO_DPI: option for DPI
  */
-#define DISP_NO_DPI
-#endif
+/* #define DISP_NO_DPI */
+
 /**
  * DISP_NO_MT_BOOT: option for mt_boot
  */

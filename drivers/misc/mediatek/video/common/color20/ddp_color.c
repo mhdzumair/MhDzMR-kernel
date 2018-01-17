@@ -930,10 +930,12 @@ static DEFINE_MUTEX(g_color_reg_lock);
 static DISPLAY_COLOR_REG_T g_color_reg;
 static int g_color_reg_valid;
 
-int color_dbg_en = 1;
+/* To enable debug log: */
+/* # echo color_dbg:1 > /sys/kernel/debug/dispsys */
+static unsigned int g_color_dbg_en;
 #define COLOR_ERR(fmt, arg...) pr_err("[COLOR] " fmt "\n", ##arg)
 #define COLOR_DBG(fmt, arg...) \
-	do { if (color_dbg_en) pr_debug("[COLOR] " fmt "\n", ##arg); } while (0)
+	do { if (g_color_dbg_en) pr_warn("[COLOR] " fmt "\n", ##arg); } while (0)
 #define COLOR_NLOG(fmt, arg...) pr_debug("[COLOR] " fmt "\n", ##arg)
 
 static ddp_module_notify g_color_cb;
@@ -1103,6 +1105,7 @@ void DpEngine_COLORonConfig(DISP_MODULE_ENUM module, void *__cmdq)
 #if defined(CONFIG_ARCH_MT6797)
 	int i, j, reg_index;
 #endif
+	const int wide_gamut_en = 0;
 
 	if (DISP_MODULE_COLOR1 == module) {
 		offset = C1_OFFSET;
@@ -1417,6 +1420,7 @@ static void color_write_hw_reg(DISP_MODULE_ENUM module,
 #if defined(CONFIG_ARCH_MT6797)
 	int i, j, reg_index;
 #endif
+	const int wide_gamut_en = 0;
 
 	if (DISP_MODULE_COLOR1 == module)
 		offset = C1_OFFSET;
@@ -2852,6 +2856,11 @@ static int _color_build_cmdq(DISP_MODULE_ENUM module, void *cmdq_trigger_handle,
 	}
 
 	return ret;
+}
+
+void disp_color_dbg_log_level(unsigned int debug_level)
+{
+	g_color_dbg_en = debug_level;
 }
 
 DDP_MODULE_DRIVER ddp_driver_color = {

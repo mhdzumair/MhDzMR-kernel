@@ -80,6 +80,7 @@
 #include "mmdvfs_mgr.h"
 #include "mt_smi.h"
 #include <mach/mt_freqhopping.h>
+#include "ddp_gamma.h"
 
 //add this file for device info --sunsiyuan@wind-mobi.com add 20161129 begin
 #ifdef CONFIG_WIND_DEVICE_INFO
@@ -164,6 +165,8 @@ static int g_is_inited;
 #ifdef CONFIG_LCT_ESD_CHECK_MULTI_REG
 unsigned int esd_recovery_level = 0;	//add by zhudaolong at 20170411
 #endif
+
+static int g_is_inited;
 
 void enqueue_buffer(display_primary_path_context *ctx, struct list_head *head,
 		    disp_internal_buffer_info *buf)
@@ -618,21 +621,12 @@ end:
 	return 0;
 }
 
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-static int release_idle_lp_dc_buffer(unsigned int need_primary_lock);
-static int allocate_idle_lp_dc_buffer(void);
-#endif
-
 void _disp_primary_path_exit_idle(const char *caller, unsigned int need_primary_lock)
 {
 	/* _disp_primary_idle_lock(); */
 	if (atomic_read(&isDdp_Idle) == 1) {
 		DISPMSG("[ddp_idle_on]_disp_primary_path_exit_idle (%s) &&&\n", caller);
 		primary_display_save_power_for_idle(0, need_primary_lock);
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-		if (primary_display_is_video_mode())
-			release_idle_lp_dc_buffer(need_primary_lock);
-#endif
 		atomic_set(&isDdp_Idle, 0);
 		atomic_set(&idle_detect_flag, 1);
 		wake_up(&idle_detect_wq);
@@ -676,7 +670,7 @@ static int _disp_primary_path_idle_detect_thread(void *data)
 #if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
 	idle_time = 2000;
 #else
-	idle_time = 50;
+	idle_time = 100;
 #endif
 
 	while (1) {
@@ -706,25 +700,13 @@ static int _disp_primary_path_idle_detect_thread(void *data)
 		_primary_path_unlock(__func__);
 
 #if !defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-		idle_time = 50;
+		idle_time = 100;
 #endif
 
 		/* _disp_primary_idle_lock(); */
 		_primary_path_esd_check_lock();
 		_primary_path_lock(__func__);
 		if (((sched_clock() - last_primary_trigger_time) / 1000) > idle_time * 1000) {
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-			/* Dynamically allocate decouple buffer. */
-			if (primary_display_is_video_mode()) {
-				ret = allocate_idle_lp_dc_buffer();
-				if (ret < 0) {
-					DISPMSG("[ddp_idle]allocate dc buffer fail\n");
-					_primary_path_unlock(__func__);
-					_primary_path_esd_check_unlock();
-					continue;
-				}
-			}
-#endif
 			enter_cnt++;
 			pr_debug("[LP] - enter: %d, flag:%d,%d\n", enter_cnt,
 				atomic_read(&isDdp_Idle), atomic_read(&idle_detect_flag));
@@ -1893,7 +1875,7 @@ static void _cmdq_start_trigger_loop(void)
 #ifndef MTK_FB_CMDQ_DISABLE
 	int ret = 0;
 
-	cmdqRecDumpCommand(pgc->cmdq_handle_trigger);
+	/* cmdqRecDumpCommand(pgc->cmdq_handle_trigger); */
 	/* this should be called only once because trigger loop will nevet stop */
 	ret = cmdqRecStartLoop(pgc->cmdq_handle_trigger);
 	if (!primary_display_is_video_mode()) {
@@ -2514,66 +2496,6 @@ static int init_decouple_buffers(void)
 	return 0;
 }
 
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-
-
-static int allocate_idle_lp_dc_buffer(void)
-{
-	int height = primary_display_get_height();
-	int width = primary_display_get_width();
-	int bpp = primary_display_get_dc_bpp();
-	int buffer_size =  width * height * bpp / 8;
-
-	decouple_buffer_info[0] = allocat_decouple_buffer(buffer_size);
-	if (decouple_buffer_info[0] != NULL) {
-		pgc->dc_buf[0] = decouple_buffer_info[0]->mva;
-		dc_vAddr[0] = (unsigned long)decouple_buffer_info[0]->va;
-	} else {
-		return -1;
-	}
-
-	/*initialize rdma config*/
-	decouple_rdma_config.height = height;
-	decouple_rdma_config.width = width;
-	decouple_rdma_config.idx = 0;
-	decouple_rdma_config.inputFormat = eRGB888;
-	decouple_rdma_config.pitch = width * DP_COLOR_BITS_PER_PIXEL(eRGB888) / 8;
-	decouple_rdma_config.security = DISP_NORMAL_BUFFER;
-
-	/*initialize wdma config*/
-	decouple_wdma_config.srcHeight = height;
-	decouple_wdma_config.srcWidth = width;
-	decouple_wdma_config.clipX = 0;
-	decouple_wdma_config.clipY = 0;
-	decouple_wdma_config.clipHeight = height;
-	decouple_wdma_config.clipWidth = width;
-	decouple_wdma_config.outputFormat = eRGB888;
-	decouple_wdma_config.useSpecifiedAlpha = 1;
-	decouple_wdma_config.alpha = 0xFF;
-	decouple_wdma_config.dstPitch = width * DP_COLOR_BITS_PER_PIXEL(eRGB888) / 8;
-	decouple_wdma_config.security = DISP_NORMAL_BUFFER;
-
-	return 0;
-}
-
-static int release_idle_lp_dc_buffer(unsigned int need_primary_lock)
-{
-	if (need_primary_lock)
-		_primary_path_lock(__func__);
-
-	if (decouple_buffer_info[0]) {
-		ion_free(decouple_buffer_info[0]->client, decouple_buffer_info[0]->handle);
-		ion_client_destroy(decouple_buffer_info[0]->client);
-		kfree(decouple_buffer_info[0]);
-		decouple_buffer_info[0] = NULL;
-	}
-
-	if (need_primary_lock)
-		_primary_path_unlock(__func__);
-	return 0;
-}
-#endif
-
 static int __build_path_direct_link(void)
 {
 	int ret = 0;
@@ -2596,9 +2518,7 @@ static int __build_path_direct_link(void)
 	DISPMSG("dpmgr set dst module FINISHED(%s)\n", ddp_get_module_name(dst_module));
 #ifndef MTKFB_NO_M4U
 	config_display_m4u_port();
-#if !defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
 	init_decouple_buffers();
-#endif
 #endif
 	dpmgr_set_lcm_utils(pgc->dpmgr_handle, pgc->plcm->drv);
 
@@ -5245,6 +5165,7 @@ int primary_display_init(char *lcm_name, unsigned int lcm_fps, int is_lcm_inited
 	dprec_init();
 	dpmgr_init();
 
+
 #ifndef MTK_FB_CMDQ_DISABLE
 	init_cmdq_slots(&(pgc->cur_config_fence), DISP_SESSION_TIMELINE_COUNT, 0);
 	init_cmdq_slots(&(pgc->subtractor_when_free), DISP_SESSION_TIMELINE_COUNT, 0);
@@ -5657,6 +5578,11 @@ int primary_display_deinit(void)
 #endif
 	_primary_path_unlock(__func__);
 	return 0;
+}
+
+int primary_display_get_init_status(void)
+{
+	return g_is_inited;
 }
 
 /* register rdma done event */
@@ -7402,6 +7328,7 @@ static int _primary_display_config_input_multiple(disp_session_input_config *ses
 	int ret = 0;
 	disp_path_handle disp_handle;
 	cmdqRecHandle cmdq_handle;
+	struct disp_ccorr_config m_ccorr_config = session_input->ccorr_config;
 
 	if (gTriggerDispMode > 0)
 		return 0;
@@ -7434,6 +7361,12 @@ static int _primary_display_config_input_multiple(disp_session_input_config *ses
 	else
 		_config_rdma_input(session_input, disp_handle);
 
+	/* set ccorr matrix */
+	if (m_ccorr_config.is_dirty) {
+		disp_ccorr_set_color_matrix(cmdq_handle,
+					    m_ccorr_config.color_matrix,
+					    m_ccorr_config.mode);
+	}
 done:
 	if (lock)
 		_primary_path_unlock(__func__);
@@ -7522,6 +7455,7 @@ int primary_display_user_cmd(unsigned int cmd, unsigned long arg)
 	MMProfileLogEx(ddp_mmp_get_events()->primary_display_cmd, MMProfileFlagStart,
 		       (unsigned long)handle, 0);
 
+	if (cmd == DISP_IOCTL_AAL_GET_HIST || cmd == DISP_IOCTL_CCORR_GET_IRQ) {
 #ifndef MTK_FB_CMDQ_DISABLE
 #if 0 /* CONFIG_FOR_SOURCE_PQ */
 	if (primary_display_is_decouple_mode()) {
@@ -7588,36 +7522,8 @@ int primary_display_user_cmd(unsigned int cmd, unsigned long arg)
 #endif
 
 	MMProfileLogEx(ddp_mmp_get_events()->primary_display_cmd, MMProfileFlagEnd,
-		       (unsigned long)handle, cmdqsize);
-	return ret;
-}
+		       cmdqsize, 0);
 
-
-int init_ext_decouple_buffers(void)
-{
-	int ret = 0;
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-	_primary_path_lock(__func__);
-
-	if (pgc->state == DISP_SLEPT) {
-		ret = -1;
-	} else {
-		if (decouple_buffer_info[0] == NULL)
-			ret = allocate_idle_lp_dc_buffer();
-	}
-
-	_primary_path_unlock(__func__);
-#endif
-	return ret;
-}
-int deinit_ext_decouple_buffers(void)
-{
-	int ret = 0;
-#if defined(CONFIG_MTK_GMO_RAM_OPTIMIZE)
-	_primary_path_lock(__func__);
-	ret = release_idle_lp_dc_buffer(0);
-	_primary_path_unlock(__func__);
-#endif
 	return ret;
 }
 
@@ -7701,10 +7607,6 @@ int primary_display_switch_mode(int sess_mode, unsigned int session, int force)
 	} else if (pgc->session_mode == DISP_SESSION_DIRECT_LINK_MODE
 		   && sess_mode == DISP_SESSION_DECOUPLE_MIRROR_MODE) {
 		/* dl to dc mirror  mirror */
-#ifdef CONFIG_MTK_GMO_RAM_OPTIMIZE
-		if (decouple_buffer_info[0] == NULL)
-			allocate_idle_lp_dc_buffer();
-#endif
 		_DL_switch_to_DC_fast();
 		pgc->session_mode = sess_mode;
 		DISPMSG("primary display is %s mode now\n", session_mode_spy(pgc->session_mode));
@@ -7716,9 +7618,6 @@ int primary_display_switch_mode(int sess_mode, unsigned int session, int force)
 		/*dc mirror  to dl */
 		_DC_switch_to_DL_fast();
 		pgc->session_mode = sess_mode;
-#ifdef CONFIG_MTK_GMO_RAM_OPTIMIZE
-		release_idle_lp_dc_buffer(0);
-#endif
 		DISPMSG("primary display is %s mode now\n", session_mode_spy(pgc->session_mode));
 		MMProfileLogEx(ddp_mmp_get_events()->primary_switch_mode, MMProfileFlagPulse,
 			       pgc->session_mode, sess_mode);
@@ -8023,6 +7922,17 @@ int primary_display_get_info(void *info)
 	dispif_info->physicalWidth = DISP_GetActiveWidth();
 	dispif_info->physicalHeight = DISP_GetActiveHeight();
 
+
+	if (DISP_GetDensity() > 0)
+		dispif_info->density = DISP_GetDensity();
+	else { /* density not defined in lcm driver, use default table */
+		if (dispif_info->displayWidth >= 1080) /* FHD */
+			dispif_info->density = 480;
+		else if (dispif_info->displayWidth >= 720) /* HD */
+			dispif_info->density = 320;
+		else
+			dispif_info->density = 240; /* qHD and below */
+	}
 
 	dispif_info->vsyncFPS = pgc->lcm_fps;
 	dispif_info->isConnected = 1;
@@ -8651,6 +8561,20 @@ LCM_PARAMS *DISP_GetLcmPara(void)
 		return NULL;
 }
 
+uint32_t DISP_GetDensity(void)
+{
+	if (pgc->plcm == NULL) {
+		DISPERR("lcm handle is null\n");
+		return 0;
+	}
+
+	if (pgc->plcm->params)
+		return pgc->plcm->params->density;
+
+	DISPERR("lcm_params is null!\n");
+	return 0;
+}
+
 LCM_DRIVER *DISP_GetLcmDrv(void)
 {
 
@@ -8702,7 +8626,8 @@ int primary_display_capture_framebuffer_decouple(unsigned long pbuf, unsigned in
 		mva = pconfig->wdma_config.dstAddress;
 	}
 	buffer_size = h_yres * pitch;
-	ASSERT((pitch / 4) >= w_xres);
+	if ((pitch / 4) < w_xres)
+		DISPERR("!!!note pitch=%d, w_xres=%d\n", pitch, w_xres);
 /* dpmgr_get_input_address(pgc->dpmgr_handle,&mva); */
 	ret = m4u_mva_map_kernel(mva, buffer_size, &va, &mapped_size);
 	if (!va || ret < 0) {
@@ -9105,7 +9030,11 @@ int disp_hal_allocate_framebuffer(phys_addr_t pa_start, phys_addr_t pa_end, unsi
 
 		struct sg_table *sg_table = &table;
 
-		sg_alloc_table(sg_table, 1, GFP_KERNEL);
+		ret = sg_alloc_table(sg_table, 1, GFP_KERNEL);
+		if (ret) {
+			DISPERR("sg_alloc_table returns fail: %d\n", ret);
+			return ret;
+		}
 
 		sg_dma_address(sg_table->sgl) = pa_start;
 		sg_dma_len(sg_table->sgl) = (pa_end - pa_start + 1);
@@ -9319,7 +9248,7 @@ int primary_display_lcm_ATA(void)
 
 	DISPFUNC();
 	_primary_path_lock(__func__);
-	if (pgc->state == 0) {
+	if (pgc->state == DISP_SLEPT) {
 		DISPMSG("ATA_LCM, primary display path is already sleep, skip\n");
 		goto done;
 	}
