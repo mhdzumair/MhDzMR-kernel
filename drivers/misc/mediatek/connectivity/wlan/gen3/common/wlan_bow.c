@@ -265,7 +265,7 @@ WLAN_STATUS bowCmdGetMacStatus(IN P_ADAPTER_T prAdapter, IN P_AMPC_COMMAND prCmd
 		DBGLOG(BOW, EVENT,
 		       "bowCmdGetMacStatus, Get channel list. Current number of channel, %d.\n", ucNumOfChannel);
 
-		rlmDomainGetChnlList(prAdapter, BAND_2G4, FALSE, MAX_BOW_NUMBER_OF_CHANNEL_2G4,
+		rlmDomainGetChnlList(prAdapter, BAND_2G4, false, MAX_BOW_NUMBER_OF_CHANNEL_2G4,
 				     &ucNumOfChannel, aucChannelList);
 
 		if (ucNumOfChannel > 0) {
@@ -277,8 +277,7 @@ WLAN_STATUS bowCmdGetMacStatus(IN P_ADAPTER_T prAdapter, IN P_AMPC_COMMAND prCmd
 			prMacStatus->ucNumOfChannel = ucNumOfChannel;
 		}
 
-		rlmDomainGetChnlList(prAdapter, BAND_5G, FALSE, MAX_BOW_NUMBER_OF_CHANNEL_5G,
-				     &ucNumOfChannel, aucChannelList);
+		rlmDomainGetChnlList(prAdapter, BAND_5G, false,  MAX_BOW_NUMBER_OF_CHANNEL_5G, &ucNumOfChannel, aucChannelList);
 
 		if (ucNumOfChannel > 0) {
 			for (idx = 0; idx < ucNumOfChannel; idx++) {
