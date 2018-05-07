@@ -1542,7 +1542,6 @@ static void binder_put_node(struct binder_node *node)
 
 static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 						 u32 desc, bool need_strong_ref)
-
 {
 	struct rb_node *n = proc->refs_by_desc.rb_node;
 	struct binder_ref *ref;
@@ -1559,6 +1558,7 @@ static struct binder_ref *binder_get_ref_olocked(struct binder_proc *proc,
 			return NULL;
 		} else {
 			return ref;
+		}
 	}
 	return NULL;
 }
@@ -2852,7 +2852,6 @@ static void binder_transaction(struct binder_proc *proc,
 			if (target_node == NULL) {
 				binder_user_error("%d:%d got transaction to invalid handle\n",
 					proc->pid, thread->pid);
-
 				return_error = BR_FAILED_REPLY;
 				return_error_param = -EINVAL;
 				return_error_line = __LINE__;
@@ -3610,7 +3609,6 @@ static int binder_thread_write(struct binder_proc *proc,
 			if (get_user(cookie, (binder_uintptr_t __user *)ptr))
 				return -EFAULT;
 			ptr += sizeof(binder_uintptr_t);
-
 			if (cmd == BC_REQUEST_DEATH_NOTIFICATION) {
 				/*
 				 * Allocate memory for death notification
@@ -3634,7 +3632,6 @@ static int binder_thread_write(struct binder_proc *proc,
 			}
 			binder_proc_lock(proc);
 			ref = binder_get_ref_olocked(proc, target, false);
-
 			if (ref == NULL) {
 				binder_user_error("%d:%d %s invalid ref %d\n",
 					proc->pid, thread->pid,
@@ -3750,7 +3747,6 @@ static int binder_thread_write(struct binder_proc *proc,
 				     "%d:%d BC_DEAD_BINDER_DONE %016llx found %pK\n",
 				     proc->pid, thread->pid, (u64)cookie,
 				     death);
-
 			if (death == NULL) {
 				binder_user_error("%d:%d BC_DEAD_BINDER_DONE %016llx not found\n",
 					proc->pid, thread->pid, (u64)cookie);
@@ -4765,7 +4761,6 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 		goto err_bad_arg;
 	}
 	vma->vm_flags = (vma->vm_flags | VM_DONTCOPY) & ~VM_MAYWRITE;
-
 	vma->vm_ops = &binder_vm_ops;
 	vma->vm_private_data = proc;
 
@@ -4773,7 +4768,6 @@ static int binder_mmap(struct file *filp, struct vm_area_struct *vma)
 	if (ret)
 		return ret;
 	proc->files = get_files_struct(current);
-
 	return 0;
 
 err_bad_arg:
@@ -5097,9 +5091,7 @@ static void print_binder_transaction_ilocked(struct seq_file *m,
 	spin_lock(&t->lock);
 	to_proc = t->to_proc;
 	seq_printf(m,
-
 		   "%s %d: %pK from %d:%d to %d:%d code %x flags %x pri %d:%d r%d",
-
 		   prefix, t->debug_id, t,
 		   t->from ? t->from->proc->pid : 0,
 		   t->from ? t->from->pid : 0,
@@ -5122,11 +5114,9 @@ static void print_binder_transaction_ilocked(struct seq_file *m,
 		seq_puts(m, " buffer free\n");
 		return;
 	}
-
 	if (buffer->target_node)
 		seq_printf(m, " node %d", buffer->target_node->debug_id);
 	seq_printf(m, " size %zd:%zd data %pK\n",
-
 		   buffer->data_size, buffer->offsets_size,
 		   buffer->data);
 }
