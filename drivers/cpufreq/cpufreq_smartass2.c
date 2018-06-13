@@ -123,7 +123,7 @@ static unsigned int sample_rate_jiffies;
 
 /*************** End of tunables ***************/
 
-//void (*pm_idle)(void);
+void (*pm_idle)(void);
 static void (*pm_idle_old)(void);
 static atomic_t active_count = ATOMIC_INIT(0);
 
@@ -896,6 +896,10 @@ static int __init cpufreq_smartass_init(void)
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	register_early_suspend(&smartass_power_suspend);
+#endif
+
+#ifdef CONFIG_POWERSUSPEND
+    register_power_suspend(&smartass_power_suspend);
 #endif
 
 	return cpufreq_register_governor(&cpufreq_gov_smartass2);
