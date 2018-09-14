@@ -123,7 +123,7 @@ static unsigned int sample_rate_jiffies;
 
 /*************** End of tunables ***************/
 
-void (*pm_idle)(void);
+//void (*pm_idle)(void);
 static void (*pm_idle_old)(void);
 static atomic_t active_count = ATOMIC_INIT(0);
 
