@@ -38,7 +38,6 @@
 #define MMP2_ICU_INT_ROUTE_PJ4_IRQ	(1 << 5)
 #define MMP2_ICU_INT_ROUTE_PJ4_FIQ	(1 << 6)
 
-
 struct icu_chip_data {
 	int			nr_irqs;
 	unsigned int		virq_base;
