@@ -1,0 +1,7 @@
+#Required toolchain
+
+Use toolchain from here :  [gcc-prebuilts](https://github.com/iykequame/gcc-prebuilts)
+
+ recommended branches :  
+- [x] arm-gnu-7.x
+- [x] arm-linaro-7.x
