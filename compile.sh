@@ -57,7 +57,7 @@ make -C $PWD O=out ARCH=arm woods_defconfig
 #
 make -j4 -C $PWD O=out ARCH=arm
 echo "$yellow Copying to out/OincBugxanDroid $nocol"
-cp out/arch/arm/boot/zImage-dtb outdir/OincBugxanDroid/Image
+cp out/arch/arm/boot/zImage-dtb outdir/MhDzMR/Image
 
 if ! [ -f $ZIMAGE ];
 then
@@ -84,16 +84,8 @@ echo ""
 echo  "$yellow Putting MhDzMR™.anDroid Kernel in Recovery Flashable Zip $nocol"
 #using lazy kernel flasher
 cd outdir
-cd OincBugxanDroid
-
-
-
-
-
+cd MhDzMR
     make
-
-    cp OincBugxanDroid-Ngt-woods*zip* out_done
-    cd ../../
     sleep 0.6;
     echo ""
     echo ""
