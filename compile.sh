@@ -22,11 +22,7 @@ echo  "$red*****************************************************"
 echo  "****************************************************$nocol"
 
 #make kernel compiling dir...
-{
-if [ -f out ];
-then rm -rf out
-fi
-}
+rm -rf out
 mkdir -p out
 
 
@@ -35,7 +31,7 @@ mkdir -p out
 export ARCH=arm
 export ARCH_MTK_PLATFORM=mt6735
 #export CROSS_COMPILE=~/arm-eabi-4.9/bin/arm-eabi-
-export CROSS_COMPILE=$(pwd)/gcc-linaro-7.3/bin/arm-eabi-
+export CROSS_COMPILE=$(pwd)/arm-linaro-7.x/bin/arm-eabi-
 export KBUILD_BUILD_USER="MhDzUmAiR"
 export KBUILD_BUILD_HOST="JiLeBi"
 
