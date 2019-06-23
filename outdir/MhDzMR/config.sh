@@ -6,7 +6,7 @@
 tmp=/tmp/kernel-flasher
 
 # leave device_names empty to allow flashing on any device
-device_names=Moto_E4,Moto E4,E4,e4,woods,woods_f,woods_retail
+device_names=Moto_E4,Moto E4,E4,e4,woods,woods_f,woods_retail,Woods,WOODS
 # leave boot_block empty for automatic (searches recovery.fstab and other locations)
 boot_block=
 # leave ramdisk_compression empty to keep the current ramdisk compression format
