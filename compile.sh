@@ -58,8 +58,8 @@ echo ""
 #woods defconfig
 make -C $PWD O=out ARCH=arm woods_defconfig
 #
-make -j4 -C $PWD O=out ARCH=arm
-echo "$yellow Copying to out/OincBugxanDroid $nocol"
+make -j6 -C $PWD O=out ARCH=arm
+echo "$yellow Copying to out/MhDzMR $nocol"
 cp out/arch/arm/boot/zImage-dtb outdir/MhDzMR/Image
 
 if ! [ -f $ZIMAGE ];
@@ -96,7 +96,7 @@ cd MhDzMR
     echo ""
     echo ""
     echo "" "Locate MhDzMR™.anDroid Kernel in the following path : "
-    echo "" "outdir/OincBugxanDroid"
+    echo "" "outdir/MhDzMR"
     echo ""
 echo  "$green▄   █ ▄▄  █    ████▄ ██   ██▄   ▄█    ▄     ▄▀  
    █  █   █ █    █   █ █ █  █  █  ██     █  ▄▀    
@@ -138,7 +138,6 @@ echo "$green·▄▄▄▄      ▐ ▄▄▄▄ .
 
 close_me ()
 {
-clear
  echo
  echo
 echo "$green▄▄▄▄·  ▄· ▄▌▄▄▄ .
@@ -152,7 +151,6 @@ echo
  echo "$blueTalent Is Nothing WIthout Ethics!!!"
  echo
  sleep 2.0;
- clear
 exit
 }
 
