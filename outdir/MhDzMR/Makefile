@@ -32,6 +32,8 @@ $(ZIP):
 	@du -h "$(NAME)-"*.zip*
 	@echo ""
 	@echo "Done."
+
+clean:
 	@rm -vf "$(NAME)-"*.zip*
 	@echo "Done."
 	@sleep 5.0;
