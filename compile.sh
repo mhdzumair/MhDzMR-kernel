@@ -14,12 +14,12 @@ purple='\033[0;95m'
 white='\033[0;97m'
 nocol='\033[0m'
 
-echo  "$red**********************************************************"
-echo  "*********************************************************"
+echo  "$red*****************************************************"
+echo  "*****************************************************"
 echo  "$purple Script modified by MhDzuMAiR || made by IzaKQuLL "
 echo  "$yellow ________________________________________________ "
 echo  "$red*****************************************************"
-echo  "****************************************************$nocol"
+echo  "*****************************************************$nocol"
 
 #make kernel compiling dir...
 {
@@ -30,41 +30,29 @@ fi
 mkdir -p out
 
 
-#exports ::
 #toolchain , custom build_user , custom build_host , arch
 export ARCH=arm
 export ARCH_MTK_PLATFORM=mt6735
-#export CROSS_COMPILE=~/arm-eabi-4.9/bin/arm-eabi-
-export CROSS_COMPILE=$(pwd)/gcc-linaro-7.3/bin/arm-eabi-
-export KBUILD_BUILD_USER="MhDzUmAiR"
-export KBUILD_BUILD_HOST="JiLeBi"
+export CROSS_COMPILE=/home/dedsec/Desktop/MhDzMR-kernel/gcc-linaro-7.5.0-2019.12-x86_64_arm-eabi/bin/arm-eabi-
 
 #make build clean and mrproper
 make clean mrproper
 
 compile_kernel ()
-{
- echo
- echo
- 
-echo "$blue          ▪       ▐ ▄      ▄▄· 
-▪         ██     •█▌▐█    ▐█ ▌▪ "
-echo "$yellow ▄█▀▄     ▐█·    ▐█▐▐▌    ██ ▄▄ "
-echo "$purple▐█▌.▐▌    ▐█▌    ██▐█▌    ▐███▌
- ▀█▄▀▪    ▀▀▀    ▀▀ █▪    ·▀▀▀ "
-                                                                                                     
+{                                                                                                     
 echo
 echo
 echo "$blue***********************************************"
 echo "          Compiling MhDzMR™.anDroid Kernel...          "
 echo "***********************************************$nocol"
 echo ""
+
 #woods defconfig
 make -C $PWD O=out ARCH=arm woods_defconfig
 #
-make -j4 -C $PWD O=out ARCH=arm
-echo "$yellow Copying to out/OincBugxanDroid $nocol"
-cp out/arch/arm/boot/zImage-dtb outdir/MhDzMR/Image
+make -j8 -C $PWD O=out ARCH=arm
+echo "$yellow Copying to out/Anykernel3 $nocol"
+cp out/arch/arm/boot/zImage-dtb outdir/Anykernel/
 
 if ! [ -f $ZIMAGE ];
 then
@@ -89,9 +77,9 @@ echo "          Packing MhDzMR™ anDroid Kernel...          "
 echo  "***********************************************$nocol"
 echo ""
 echo  "$yellow Putting MhDzMR™.anDroid Kernel in Recovery Flashable Zip $nocol"
-#using lazy kernel flasher
-cd outdir
-cd MhDzMR
+
+#using Anykernel3 templete
+cd outdir/Anykernel3
     make
     sleep 0.6;
     echo ""
@@ -100,7 +88,7 @@ cd MhDzMR
     echo ""
     echo ""
     echo "" "Locate MhDzMR™.anDroid Kernel in the following path : "
-    echo "" "outdir/OincBugxanDroid"
+    echo "" "outdir/Anykernel3"
     echo ""
 echo  "$green▄   █ ▄▄  █    ████▄ ██   ██▄   ▄█    ▄     ▄▀  
    █  █   █ █    █   █ █ █  █  █  ██     █  ▄▀    
@@ -109,7 +97,7 @@ echo  "$green▄   █ ▄▄  █    ████▄ ██   ██▄   ▄�
 █▄ ▄█  █        ▀         █ ███▀   ▐ █  █ █  ███  
  ▀▀▀    ▀                █           █   ██       
                         ▀ "                         
-    echo
+    echo 
     echo  "$blue***********************************************"
     echo "      MhDzMR™.anDroid Kernel "
     echo  "***********************************************$nocol"
@@ -139,35 +127,6 @@ echo "$green·▄▄▄▄      ▐ ▄▄▄▄ .
 
 }
 
-
-close_me ()
-{
-clear
- echo
- echo
-echo "$green▄▄▄▄·  ▄· ▄▌▄▄▄ .
-▐█ ▀█▪▐█▪██▌▀▄.▀·
-▐█▀▀█▄▐█▌▐█▪▐▀▀▪▄ "
-echo "$yellow██▄▪▐█ ▐█▀·.▐█▄▄▌
-·▀▀▀▀   ▀ •  ▀▀▀ "
-echo
- echo
- echo
- echo "$blueTalent Is Nothing WIthout Ethics!!!"
- echo
- sleep 2.0;
- clear
-exit
-}
-
-case $1 in
-clean)
-#make ARCH=arm -j4 clean mrproper
-rm -rf include/linux/autoconf.h
-;;
-*)
 compile_kernel
 zip_zak
-close_me
 ;;
-esac
