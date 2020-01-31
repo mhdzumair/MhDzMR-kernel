@@ -79,7 +79,7 @@ echo ""
 echo  "$yellow Putting MhDzMR™.anDroid Kernel in Recovery Flashable Zip $nocol"
 
 #using Anykernel3 templete
-cd outdir/Anykernel3
+cd outdir/AnyKernel3
     make
     sleep 0.6;
     echo ""
@@ -129,4 +129,3 @@ echo "$green·▄▄▄▄      ▐ ▄▄▄▄ .
 
 compile_kernel
 zip_zak
-;;
