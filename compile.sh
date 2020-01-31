@@ -52,7 +52,7 @@ make -C $PWD O=out ARCH=arm woods_defconfig
 #
 make -j8 -C $PWD O=out ARCH=arm
 echo "$yellow Copying to out/Anykernel3 $nocol"
-cp out/arch/arm/boot/zImage-dtb outdir/Anykernel/
+cp out/arch/arm/boot/zImage-dtb outdir/AnyKernel3/
 
 if ! [ -f $ZIMAGE ];
 then
@@ -78,7 +78,7 @@ echo  "***********************************************$nocol"
 echo ""
 echo  "$yellow Putting MhDzMR™.anDroid Kernel in Recovery Flashable Zip $nocol"
 
-#using Anykernel3 templete
+#using AnyKernel3 templete
 cd outdir/AnyKernel3
     make
     sleep 0.6;
