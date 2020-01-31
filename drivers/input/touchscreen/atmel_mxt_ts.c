@@ -19,7 +19,6 @@
 #include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
-#include <linux/input/doubletap2wake.h>
 #include <linux/i2c.h>
 #include <linux/i2c/atmel_mxt_ts.h>
 #include <linux/input/mt.h>
