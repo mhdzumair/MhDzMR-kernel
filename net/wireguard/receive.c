@@ -120,7 +120,7 @@ static void wg_receive_handshake_packet(struct wg_device *wg,
 	under_load = skb_queue_len(&wg->incoming_handshakes) >=
 		     MAX_QUEUED_INCOMING_HANDSHAKES / 8;
 	if (under_load)
-		last_under_load = ktime_get_boot_fast_ns();
+		last_under_load = ktime_get_coarse_boottime_ns();
 	else if (last_under_load)
 		under_load = !wg_birthdate_has_expired(last_under_load, 1);
 	mac_state = wg_cookie_validate_packet(&wg->cookie_checker, skb,
@@ -281,9 +281,9 @@ static bool decrypt_packet(struct sk_buff *skb, struct noise_symmetric_key *key,
 	if (skb_to_sgvec(skb, sg, 0, skb->len) <= 0)
 		return false;
 
-	if (!chacha20poly1305_decrypt_sg(sg, sg, skb->len, NULL, 0,
-					 PACKET_CB(skb)->nonce, key->key,
-					 simd_context))
+	if (!chacha20poly1305_decrypt_sg_inplace(sg, skb->len, NULL, 0,
+						 PACKET_CB(skb)->nonce, key->key,
+						 simd_context))
 		return false;
 
 	/* Another ugly situation of pushing and pulling the header so as to
@@ -382,7 +382,7 @@ static void wg_packet_consume_data_done(struct wg_peer *peer,
 	/* We've already verified the Poly1305 auth tag, which means this packet
 	 * was not modified in transit. We can therefore tell the networking
 	 * stack that all checksums of every layer of encapsulation have already
-	 * been checked "by the hardware" and therefore is unneccessary to check
+	 * been checked "by the hardware" and therefore is unnecessary to check
 	 * again in software.
 	 */
 	skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -521,8 +521,7 @@ void wg_packet_decrypt_worker(struct work_struct *work)
 					   &PACKET_CB(skb)->keypair->receiving,
 					   &simd_context)) ?
 				PACKET_STATE_CRYPTED : PACKET_STATE_DEAD;
-		wg_queue_enqueue_per_peer_napi(&PACKET_PEER(skb)->rx_queue, skb,
-					       state);
+		wg_queue_enqueue_per_peer_napi(skb, state);
 		simd_relax(&simd_context);
 	}
 
@@ -551,7 +550,7 @@ static void wg_packet_consume_data(struct wg_device *wg, struct sk_buff *skb)
 						   wg->packet_crypt_wq,
 						   &wg->decrypt_queue.last_cpu);
 	if (unlikely(ret == -EPIPE))
-		wg_queue_enqueue_per_peer(&peer->rx_queue, skb, PACKET_STATE_DEAD);
+		wg_queue_enqueue_per_peer_napi(skb, PACKET_STATE_DEAD);
 	if (likely(!ret || ret == -EPIPE)) {
 		rcu_read_unlock_bh();
 		return;

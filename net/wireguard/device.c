@@ -112,9 +112,7 @@ static int wg_stop(struct net_device *dev)
 		wg_timers_stop(peer);
 		wg_noise_handshake_clear(&peer->handshake);
 		wg_noise_keypairs_clear(&peer->keypairs);
-		atomic64_set(&peer->last_sent_handshake,
-			     ktime_get_boot_fast_ns() -
-				     (u64)(REKEY_TIMEOUT + 1) * NSEC_PER_SEC);
+		wg_noise_reset_last_sent_handshake(&peer->last_sent_handshake);
 	}
 	mutex_unlock(&wg->device_update_lock);
 	skb_queue_purge(&wg->incoming_handshakes);
@@ -173,8 +171,8 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		dev_kfree_skb(skb);
 		skb = segs;
 	}
-	do {
-		next = skb->next;
+
+	skb_list_walk_safe(skb, skb, next) {
 		skb_mark_not_on_list(skb);
 
 		skb = skb_share_check(skb, GFP_ATOMIC);
@@ -189,7 +187,7 @@ static netdev_tx_t wg_xmit(struct sk_buff *skb, struct net_device *dev)
 		PACKET_CB(skb)->mtu = mtu;
 
 		__skb_queue_tail(&packets, skb);
-	} while ((skb = next) != NULL);
+	}
 
 	spin_lock_bh(&peer->staged_packet_queue.lock);
 	/* If the queue is getting too big, we start removing the oldest packets

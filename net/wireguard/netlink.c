@@ -13,14 +13,15 @@
 #include <linux/if.h>
 #include <net/genetlink.h>
 #include <net/sock.h>
+#include <crypto/algapi.h>
 
 static struct genl_family genl_family;
 
 static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 	[WGDEVICE_A_IFINDEX]		= { .type = NLA_U32 },
 	[WGDEVICE_A_IFNAME]		= { .type = NLA_NUL_STRING, .len = IFNAMSIZ - 1 },
-	[WGDEVICE_A_PRIVATE_KEY]	= { .len = NOISE_PUBLIC_KEY_LEN },
-	[WGDEVICE_A_PUBLIC_KEY]		= { .len = NOISE_PUBLIC_KEY_LEN },
+	[WGDEVICE_A_PRIVATE_KEY]	= { .type = NLA_EXACT_LEN, .len = NOISE_PUBLIC_KEY_LEN },
+	[WGDEVICE_A_PUBLIC_KEY]		= { .type = NLA_EXACT_LEN, .len = NOISE_PUBLIC_KEY_LEN },
 	[WGDEVICE_A_FLAGS]		= { .type = NLA_U32 },
 	[WGDEVICE_A_LISTEN_PORT]	= { .type = NLA_U16 },
 	[WGDEVICE_A_FWMARK]		= { .type = NLA_U32 },
@@ -28,12 +29,12 @@ static const struct nla_policy device_policy[WGDEVICE_A_MAX + 1] = {
 };
 
 static const struct nla_policy peer_policy[WGPEER_A_MAX + 1] = {
-	[WGPEER_A_PUBLIC_KEY]				= { .len = NOISE_PUBLIC_KEY_LEN },
-	[WGPEER_A_PRESHARED_KEY]			= { .len = NOISE_SYMMETRIC_KEY_LEN },
+	[WGPEER_A_PUBLIC_KEY]				= { .type = NLA_EXACT_LEN, .len = NOISE_PUBLIC_KEY_LEN },
+	[WGPEER_A_PRESHARED_KEY]			= { .type = NLA_EXACT_LEN, .len = NOISE_SYMMETRIC_KEY_LEN },
 	[WGPEER_A_FLAGS]				= { .type = NLA_U32 },
-	[WGPEER_A_ENDPOINT]				= { .len = sizeof(struct sockaddr) },
+	[WGPEER_A_ENDPOINT]				= { .type = NLA_MIN_LEN, .len = sizeof(struct sockaddr) },
 	[WGPEER_A_PERSISTENT_KEEPALIVE_INTERVAL]	= { .type = NLA_U16 },
-	[WGPEER_A_LAST_HANDSHAKE_TIME]			= { .len = sizeof(struct __kernel_timespec) },
+	[WGPEER_A_LAST_HANDSHAKE_TIME]			= { .type = NLA_EXACT_LEN, .len = sizeof(struct __kernel_timespec) },
 	[WGPEER_A_RX_BYTES]				= { .type = NLA_U64 },
 	[WGPEER_A_TX_BYTES]				= { .type = NLA_U64 },
 	[WGPEER_A_ALLOWEDIPS]				= { .type = NLA_NESTED },
@@ -42,7 +43,7 @@ static const struct nla_policy peer_policy[WGPEER_A_MAX + 1] = {
 
 static const struct nla_policy allowedip_policy[WGALLOWEDIP_A_MAX + 1] = {
 	[WGALLOWEDIP_A_FAMILY]		= { .type = NLA_U16 },
-	[WGALLOWEDIP_A_IPADDR]		= { .len = sizeof(struct in_addr) },
+	[WGALLOWEDIP_A_IPADDR]		= { .type = NLA_MIN_LEN, .len = sizeof(struct in_addr) },
 	[WGALLOWEDIP_A_CIDR_MASK]	= { .type = NLA_U8 }
 };
 
@@ -90,12 +91,21 @@ static int get_allowedips(struct sk_buff *skb, const u8 *ip, u8 cidr,
 	return 0;
 }
 
+struct dump_ctx {
+	struct wg_device *wg;
+	struct wg_peer *next_peer;
+	u64 allowedips_seq;
+	struct allowedips_node *next_allowedip;
+};
+
+#define DUMP_CTX(cb) ((struct dump_ctx *)(cb)->args)
+
 static int
-get_peer(struct wg_peer *peer, struct allowedips_node **next_allowedips_node,
-	 u64 *allowedips_seq, struct sk_buff *skb)
+get_peer(struct wg_peer *peer, struct sk_buff *skb, struct dump_ctx *ctx)
 {
+
 	struct nlattr *allowedips_nest, *peer_nest = nla_nest_start(skb, 0);
-	struct allowedips_node *allowedips_node = *next_allowedips_node;
+	struct allowedips_node *allowedips_node = ctx->next_allowedip;
 	bool fail;
 
 	if (!peer_nest)
@@ -151,9 +161,9 @@ get_peer(struct wg_peer *peer, struct allowedips_node **next_allowedips_node,
 	}
 	if (!allowedips_node)
 		goto no_allowedips;
-	if (!*allowedips_seq)
-		*allowedips_seq = peer->device->peer_allowedips.seq;
-	else if (*allowedips_seq != peer->device->peer_allowedips.seq)
+	if (!ctx->allowedips_seq)
+		ctx->allowedips_seq = peer->device->peer_allowedips.seq;
+	else if (ctx->allowedips_seq != peer->device->peer_allowedips.seq)
 		goto no_allowedips;
 
 	allowedips_nest = nla_nest_start(skb, WGPEER_A_ALLOWEDIPS);
@@ -169,15 +179,15 @@ get_peer(struct wg_peer *peer, struct allowedips_node **next_allowedips_node,
 		if (get_allowedips(skb, ip, cidr, family)) {
 			nla_nest_end(skb, allowedips_nest);
 			nla_nest_end(skb, peer_nest);
-			*next_allowedips_node = allowedips_node;
+			ctx->next_allowedip = allowedips_node;
 			return -EMSGSIZE;
 		}
 	}
 	nla_nest_end(skb, allowedips_nest);
 no_allowedips:
 	nla_nest_end(skb, peer_nest);
-	*next_allowedips_node = NULL;
-	*allowedips_seq = 0;
+	ctx->next_allowedip = NULL;
+	ctx->allowedips_seq = 0;
 	return 0;
 err:
 	nla_nest_cancel(skb, peer_nest);
@@ -186,37 +196,29 @@ err:
 
 static int wg_get_device_start(struct netlink_callback *cb)
 {
-	struct nlattr **attrs = genl_family_attrbuf(&genl_family);
 	struct wg_device *wg;
-	int ret;
 
-	ret = nlmsg_parse(cb->nlh, GENL_HDRLEN + genl_family.hdrsize, attrs,
-			  genl_family.maxattr, device_policy, NULL);
-	if (ret < 0)
-		return ret;
-	wg = lookup_interface(attrs, cb->skb);
+	wg = lookup_interface(genl_dumpit_info(cb)->attrs, cb->skb);
 	if (IS_ERR(wg))
 		return PTR_ERR(wg);
-	cb->args[0] = (long)wg;
+	DUMP_CTX(cb)->wg = wg;
 	return 0;
 }
 
 static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 {
-	struct wg_peer *peer, *next_peer_cursor, *last_peer_cursor;
+	struct wg_peer *peer, *next_peer_cursor;
+	struct dump_ctx *ctx = DUMP_CTX(cb);
+	struct wg_device *wg = ctx->wg;
 	struct nlattr *peers_nest;
-	struct wg_device *wg;
 	int ret = -EMSGSIZE;
 	bool done = true;
 	void *hdr;
 
-	wg = (struct wg_device *)cb->args[0];
-	next_peer_cursor = (struct wg_peer *)cb->args[1];
-	last_peer_cursor = (struct wg_peer *)cb->args[1];
-
 	rtnl_lock();
 	mutex_lock(&wg->device_update_lock);
 	cb->seq = wg->device_update_gen;
+	next_peer_cursor = ctx->next_peer;
 
 	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
 			  &genl_family, NLM_F_MULTI, WG_CMD_GET_DEVICE);
@@ -224,7 +226,7 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		goto out;
 	genl_dump_check_consistent(cb, hdr);
 
-	if (!last_peer_cursor) {
+	if (!ctx->next_peer) {
 		if (nla_put_u16(skb, WGDEVICE_A_LISTEN_PORT,
 				wg->incoming_port) ||
 		    nla_put_u32(skb, WGDEVICE_A_FWMARK, wg->fwmark) ||
@@ -257,15 +259,14 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 	 * coherent dump anyway, so they'll try again.
 	 */
 	if (list_empty(&wg->peer_list) ||
-	    (last_peer_cursor && list_empty(&last_peer_cursor->peer_list))) {
+	    (ctx->next_peer && list_empty(&ctx->next_peer->peer_list))) {
 		nla_nest_cancel(skb, peers_nest);
 		goto out;
 	}
 	lockdep_assert_held(&wg->device_update_lock);
-	peer = list_prepare_entry(last_peer_cursor, &wg->peer_list, peer_list);
+	peer = list_prepare_entry(ctx->next_peer, &wg->peer_list, peer_list);
 	list_for_each_entry_continue(peer, &wg->peer_list, peer_list) {
-		if (get_peer(peer, (struct allowedips_node **)&cb->args[2],
-			     (u64 *)&cb->args[4] /* and args[5] */, skb)) {
+		if (get_peer(peer, skb, ctx)) {
 			done = false;
 			break;
 		}
@@ -276,7 +277,7 @@ static int wg_get_device_dump(struct sk_buff *skb, struct netlink_callback *cb)
 out:
 	if (!ret && !done && next_peer_cursor)
 		wg_peer_get(next_peer_cursor);
-	wg_peer_put(last_peer_cursor);
+	wg_peer_put(ctx->next_peer);
 	mutex_unlock(&wg->device_update_lock);
 	rtnl_unlock();
 
@@ -286,10 +287,10 @@ out:
 	}
 	genlmsg_end(skb, hdr);
 	if (done) {
-		cb->args[1] = 0;
+		ctx->next_peer = NULL;
 		return 0;
 	}
-	cb->args[1] = (long)next_peer_cursor;
+	ctx->next_peer = next_peer_cursor;
 	return skb->len;
 
 	/* At this point, we can't really deal ourselves with safely zeroing out
@@ -300,12 +301,11 @@ out:
 
 static int wg_get_device_done(struct netlink_callback *cb)
 {
-	struct wg_device *wg = (struct wg_device *)cb->args[0];
-	struct wg_peer *peer = (struct wg_peer *)cb->args[1];
+	struct dump_ctx *ctx = DUMP_CTX(cb);
 
-	if (wg)
-		dev_put(wg->dev);
-	wg_peer_put(peer);
+	if (ctx->wg)
+		dev_put(ctx->wg->dev);
+	wg_peer_put(ctx->next_peer);
 	return 0;
 }
 
@@ -368,8 +368,12 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 	if (attrs[WGPEER_A_PRESHARED_KEY] &&
 	    nla_len(attrs[WGPEER_A_PRESHARED_KEY]) == NOISE_SYMMETRIC_KEY_LEN)
 		preshared_key = nla_data(attrs[WGPEER_A_PRESHARED_KEY]);
+
 	if (attrs[WGPEER_A_FLAGS])
 		flags = nla_get_u32(attrs[WGPEER_A_FLAGS]);
+	ret = -EOPNOTSUPP;
+	if (flags & ~__WGPEER_F_ALL)
+		goto out;
 
 	ret = -EPFNOSUPPORT;
 	if (attrs[WGPEER_A_PROTOCOL_VERSION]) {
@@ -379,10 +383,10 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 
 	peer = wg_pubkey_hashtable_lookup(wg->peer_hashtable,
 					  nla_data(attrs[WGPEER_A_PUBLIC_KEY]));
+	ret = 0;
 	if (!peer) { /* Peer doesn't exist yet. Add a new one. */
-		ret = -ENODEV;
-		if (flags & WGPEER_F_REMOVE_ME)
-			goto out; /* Tried to remove a non-existing peer. */
+		if (flags & (WGPEER_F_REMOVE_ME | WGPEER_F_UPDATE_ONLY))
+			goto out;
 
 		/* The peer is new, so there aren't allowed IPs to remove. */
 		flags &= ~WGPEER_F_REPLACE_ALLOWEDIPS;
@@ -403,17 +407,22 @@ static int set_peer(struct wg_device *wg, struct nlattr **attrs)
 		}
 		up_read(&wg->static_identity.lock);
 
-		ret = -ENOMEM;
 		peer = wg_peer_create(wg, public_key, preshared_key);
-		if (!peer)
+		if (IS_ERR(peer)) {
+			/* Similar to the above, if the key is invalid, we skip
+			 * it without fanfare, so that services don't need to
+			 * worry about doing key validation themselves.
+			 */
+			ret = PTR_ERR(peer) == -EKEYREJECTED ? 0 : PTR_ERR(peer);
+			peer = NULL;
 			goto out;
+		}
 		/* Take additional reference, as though we've just been
 		 * looked up.
 		 */
 		wg_peer_get(peer);
 	}
 
-	ret = 0;
 	if (flags & WGPEER_F_REMOVE_ME) {
 		wg_peer_remove(peer);
 		goto out;
@@ -487,6 +496,7 @@ out:
 static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 {
 	struct wg_device *wg = lookup_interface(info->attrs, skb);
+	u32 flags = 0;
 	int ret;
 
 	if (IS_ERR(wg)) {
@@ -496,6 +506,12 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 
 	rtnl_lock();
 	mutex_lock(&wg->device_update_lock);
+
+	if (info->attrs[WGDEVICE_A_FLAGS])
+		flags = nla_get_u32(info->attrs[WGDEVICE_A_FLAGS]);
+	ret = -EOPNOTSUPP;
+	if (flags & ~__WGDEVICE_F_ALL)
+		goto out;
 
 	ret = -EPERM;
 	if ((info->attrs[WGDEVICE_A_LISTEN_PORT] ||
@@ -520,9 +536,7 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 			goto out;
 	}
 
-	if (info->attrs[WGDEVICE_A_FLAGS] &&
-	    nla_get_u32(info->attrs[WGDEVICE_A_FLAGS]) &
-		    WGDEVICE_F_REPLACE_PEERS)
+	if (flags & WGDEVICE_F_REPLACE_PEERS)
 		wg_peer_remove_all(wg);
 
 	if (info->attrs[WGDEVICE_A_PRIVATE_KEY] &&
@@ -531,6 +545,10 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 		u8 *private_key = nla_data(info->attrs[WGDEVICE_A_PRIVATE_KEY]);
 		u8 public_key[NOISE_PUBLIC_KEY_LEN];
 		struct wg_peer *peer, *temp;
+
+		if (!crypto_memneq(wg->static_identity.static_private,
+				   private_key, NOISE_PUBLIC_KEY_LEN))
+			goto skip_set_private_key;
 
 		/* We remove before setting, to prevent race, which means doing
 		 * two 25519-genpub ops.
@@ -549,12 +567,15 @@ static int wg_set_device(struct sk_buff *skb, struct genl_info *info)
 							 private_key);
 		list_for_each_entry_safe(peer, temp, &wg->peer_list,
 					 peer_list) {
-			if (!wg_noise_precompute_static_static(peer))
+			if (wg_noise_precompute_static_static(peer))
+				wg_noise_expire_current_peer_keypairs(peer);
+			else
 				wg_peer_remove(peer);
 		}
 		wg_cookie_checker_precompute_device_keys(&wg->cookie_checker);
 		up_write(&wg->static_identity.lock);
 	}
+skip_set_private_key:
 
 	if (info->attrs[WGDEVICE_A_PEERS]) {
 		struct nlattr *attr, *peer[WGPEER_A_MAX + 1];
@@ -596,12 +617,16 @@ struct genl_ops genl_ops[] = {
 #endif
 		.dumpit = wg_get_device_dump,
 		.done = wg_get_device_done,
+#ifdef COMPAT_CANNOT_INDIVIDUAL_NETLINK_OPS_POLICY
 		.policy = device_policy,
+#endif
 		.flags = GENL_UNS_ADMIN_PERM
 	}, {
 		.cmd = WG_CMD_SET_DEVICE,
 		.doit = wg_set_device,
+#ifdef COMPAT_CANNOT_INDIVIDUAL_NETLINK_OPS_POLICY
 		.policy = device_policy,
+#endif
 		.flags = GENL_UNS_ADMIN_PERM
 	}
 };
@@ -618,6 +643,9 @@ __ro_after_init = {
 	.version = WG_GENL_VERSION,
 	.maxattr = WGDEVICE_A_MAX,
 	.module = THIS_MODULE,
+#ifndef COMPAT_CANNOT_INDIVIDUAL_NETLINK_OPS_POLICY
+	.policy = device_policy,
+#endif
 	.netnsok = true
 };
 
