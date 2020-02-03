@@ -16,7 +16,7 @@ done < <(curl -A "$USER_AGENT" -LSs --connect-timeout 30 https://build.wireguard
 
 [[ -n $VERSION ]]
 
-if [[ -f net/wireguard/version.h && $(< net/wireguard/version.h) == *${BASH_REMATCH[1]}* ]]; then
+if [[ -f net/wireguard/version.h && $(< net/wireguard/version.h) == *$VERSION* ]]; then
 	touch net/wireguard/.check
 	exit 0
 fi
