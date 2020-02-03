@@ -264,8 +264,8 @@ static void tcp_westwood_info(struct sock *sk, u32 ext,
 	if (ext & (1 << (INET_DIAG_VEGASINFO - 1))) {
 		struct tcpvegas_info info = {
 			.tcpv_enabled = 1,
-			.tcpv_rtt = jiffies_to_usecs(ca->rtt);
-			.tcpv_minrtt = jiffies_to_usecs(ca->rtt_min);
+			.tcpv_rtt = jiffies_to_usecs(ca->rtt),
+			.tcpv_minrtt = jiffies_to_usecs(ca->rtt_min),
 		};
 
 		nla_put(skb, INET_DIAG_VEGASINFO, sizeof(info), &info);
