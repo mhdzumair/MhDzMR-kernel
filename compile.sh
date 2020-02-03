@@ -42,7 +42,7 @@ mkdir -p out
 #toolchain , custom build_user , custom build_host , arch
 export ARCH=arm
 export ARCH_MTK_PLATFORM=mt6735
-export CROSS_COMPILE=/home/dedsec/Desktop/MhDzMR-kernel/gcc-linaro-7.5.0-2019.12-x86_64_arm-eabi/bin/arm-eabi-
+export CROSS_COMPILE=/home/dedsec/Desktop/MhDzMR-kernel/gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
 export KBUILD_BUILD_USER="CheRRy"
 export KBUILD_BUILD_HOST="JiLeBi"
 #make build clean and mrproper
