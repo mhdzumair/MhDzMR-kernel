@@ -10,6 +10,7 @@
 # Normal rules
 #
 gcc-linaro-7.5.0-2019.12-x86_64_arm-eabi/
+out/
 outdir/
 gcc-linaro-7.5.0-2019.12-x86_64_arm-linux-gnueabihf/
 *.pyc
