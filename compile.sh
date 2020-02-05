@@ -46,11 +46,11 @@ export_things(){
 #export toolchain , custom build_user , custom build_host , arch
 export ARCH=arm
 export ARCH_MTK_PLATFORM=mt6735
-export CROSS_COMPILE=$KERNEL_DIR/arm-linux-androideabi-4.9/bin/arm-linux-androideabi-
+export CROSS_COMPILE=$KERNEL_DIR/gcc-linaro-7.5.0-2019.12-x86_64_arm-eabi/bin/arm-eabi-
 export KBUILD_BUILD_USER="CheRRy"
 export KBUILD_BUILD_HOST="JiLeBi"
 #clean the build
-make clean && make mrproper
+make clean mrproper
 #defconfig
 make -C $PWD O=out ARCH=arm woods_defconfig
 }
