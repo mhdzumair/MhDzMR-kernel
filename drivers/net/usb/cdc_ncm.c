@@ -687,7 +687,7 @@ static void cdc_ncm_free(struct cdc_ncm_ctx *ctx)
 	kfree(ctx);
 }
 
-int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_altsetting)
+int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_altsetting, int drvflags)
 {
 	const struct usb_cdc_union_desc *union_desc = NULL;
 	struct cdc_ncm_ctx *ctx;
@@ -956,7 +956,7 @@ static int cdc_ncm_bind(struct usbnet *dev, struct usb_interface *intf)
 	 * Additionally, generic NCM devices are assumed to accept arbitrarily
 	 * placed NDP.
 	 */
-	return cdc_ncm_bind_common(dev, intf, CDC_NCM_DATA_ALTSETTING_NCM);
+	return cdc_ncm_bind_common(dev, intf, CDC_NCM_DATA_ALTSETTING_NCM, 0);
 }
 
 static void cdc_ncm_align_tail(struct sk_buff *skb, size_t modulus, size_t remainder, size_t max)
