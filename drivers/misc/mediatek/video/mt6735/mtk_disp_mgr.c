@@ -2374,6 +2374,7 @@ static void mtk_disp_rgb_work(struct work_struct *work) {
 
 static int __init mtk_disp_mgr_init(void)
 {
+	int rc = 0;
 	if (platform_device_register(&mtk_disp_mgr_device))
 		return -ENODEV;
 
@@ -2388,7 +2389,7 @@ static int __init mtk_disp_mgr_init(void)
 	INIT_WORK(&mtk_rgb_work_queue.work, mtk_disp_rgb_work);
 	#endif
 
-	return 0;
+	return rc;
 }
 
 static void __exit mtk_disp_mgr_exit(void)
