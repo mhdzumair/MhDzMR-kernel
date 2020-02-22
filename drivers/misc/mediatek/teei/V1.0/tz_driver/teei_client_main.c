@@ -738,7 +738,7 @@ static int init_teei_framework(void)
 
 #define TEEI_CONFIG_FULL_PATH_DEV_NAME "/dev/teei_config"
 #define TEEI_CONFIG_DEV "teei_config"
-#define TEEI_CONFIG_IOC_MAGIC 'T' /* "TEEI Client" */
+#define TEEI_CONFIG_IOC_MAGIC 0x775B777E /* "TEEI Client" */
 #define TEEI_CONFIG_IOCTL_INIT_TEEI _IOWR(TEEI_CONFIG_IOC_MAGIC, 3, int)
 
 unsigned int teei_flags = 0;
