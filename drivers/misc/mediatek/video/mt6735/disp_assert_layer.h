@@ -67,7 +67,4 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-extern void __inner_flush_dcache_all(void);
-
 #endif /* __DISP_ASSERT_LAYER_H__ */
