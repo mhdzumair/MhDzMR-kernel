@@ -49,10 +49,10 @@ static u32 teei_smc(u32 cmd_addr, int size, int valid_flag)
 	set_sch_nq_cmd();
 	Flush_Dcache_By_Area((unsigned long)t_nt_buffer, (unsigned long)t_nt_buffer + 0x1000);
 
-	n_invoke_t_nq((uint64_t *)(&smc_type), 0, 0);
+	n_invoke_t_nq((uint32_t *)(&smc_type), 0, 0);
 	while(smc_type == 0x54) {
 		//udelay(IRQ_DELAY);
-		nt_sched_t((uint64_t *)(&smc_type));
+		nt_sched_t((uint32_t *)(&smc_type));
 	}
 	return 0;
 }

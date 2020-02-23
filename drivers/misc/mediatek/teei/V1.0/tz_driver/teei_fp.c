@@ -128,11 +128,11 @@ int __send_fp_command(unsigned long share_memory_size)
 	Flush_Dcache_By_Area((unsigned long)fp_buff_addr, fp_buff_addr + FP_BUFF_SIZE);
 
 	fp_call_flag = GLSCH_HIGH;
-	n_invoke_t_drv((uint64_t *)(&smc_type), 0, 0);
+	n_invoke_t_drv((uint32_t *)(&smc_type), 0, 0);
 
 	while(smc_type == 0x54) {
 		//udelay(IRQ_DELAY);
-		nt_sched_t((uint64_t *)(&smc_type));
+		nt_sched_t((uint32_t *)(&smc_type));
 	}
 
 	return 0;
@@ -174,7 +174,7 @@ int send_fp_command(unsigned long share_memory_size)
 			ut_pm_mutex_unlock(&pm_mutex);
 	        up(&fdrv_lock);
             return retVal;
-        }	
+        }
 
 	down(&fdrv_sema);
 	IMSG_DEBUG("send_fp_command end\n");

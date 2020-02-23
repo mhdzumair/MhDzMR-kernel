@@ -948,7 +948,6 @@ ret_encode_u32:
 		IMSG_ERROR("copy from user failed ");
 		retVal = -EFAULT;
 	}
-
 	return retVal;
 }
 
