@@ -56,7 +56,7 @@ make -C $PWD O=out ARCH=arm woods_defconfig
 }
 
 compile_kernel ()
-{                                                                                                     
+{
 echo
 echo
 echo "$blue***********************************************"
@@ -85,13 +85,15 @@ echo ""
 
 echo "$yellow Checking if there is already zImage $nocol"
 if [ -f $XIMAGE ];
-then 
+then
 rm $XIMAGE
 echo "$red Deleting existing zImage"
 fi
 
 echo "$yellow Copying zImage-dtb to outdir/Anykernel3 $nocol"
 cp out/arch/arm/boot/zImage-dtb outdir/AnyKernel3/
+echo "$green Copying modules to specific Dir $nocol"
+find -iname '*.ko' -exec cp {} outdir/AnyKernel3/modules/system/lib/modules/ \;
 
 #using AnyKernel3 templete
 cd outdir/AnyKernel3
