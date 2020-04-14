@@ -822,7 +822,7 @@ static int SYSRAM_mmap(
 	struct file *pFile,
 	struct vm_area_struct *pVma)
 {
-	long length = 0;
+	unsigned long length = 0;
 	MUINT32 pfn = 0x0;
 	/* LOG_MSG(""); */
 	pVma->vm_page_prot = pgprot_noncached(pVma->vm_page_prot);
@@ -1128,32 +1128,11 @@ static struct platform_driver SysramPlatformDriver = {
 /*
 ssize_t (*read) (struct file *, char __user *, size_t, loff_t *)
 */
-#define USE_OLD_STYPE_1117 0
-#if USE_OLD_STYPE_1117
-static int SYSRAM_DumpLayoutToProc(
-	char *pPage,
-	char **ppStart,
-	off_t   Off,
-	int     Count,
-	int *pEof,
-	void *pData)
-#else /* new file_operations style */
 static ssize_t SYSRAM_DumpLayoutToProc(
 	struct file *pFile,
 	char *pStart,
 	size_t Off,
 	loff_t *Count)
-#endif
-{
-#if USE_OLD_STYPE_1117
-	char *p = pPage;
-	MUINT32 len = 0;
-	MUINT32 Index = 0;
-	SYSRAM_MEM_NODE_STRUCT *pCurrNode = NULL;
-
-	p += sprintf(p, "\n[SYSRAM_DumpLayoutToProc]\n");
-	p += sprintf(p, "AllocatedTbl = 0x%08lX\n", Sysram.AllocatedTbl);
-	p += sprintf(p, "=========================================\n");
 	for (Index = 0; Index < SYSRAM_MEM_BANK_AMOUNT; Index++) {
 		p += sprintf(p, "\n [Mem Pool %ld] (IndexTbl, UserCount)=(%lX, %ld)\n",
 						Index,
@@ -1212,34 +1191,20 @@ static ssize_t SYSRAM_DumpLayoutToProc(
 	LOG_ERR("SYSRAM_DumpLayoutToProc: Not implement");
 	return 0;
 #endif
+=======
+{
+	LOG_ERR("SYSRAM_DumpLayoutToProc: Not implement");
+	return 0;
 }
 /* ------------------------------------------------------------------------------ */
 /*
 ssize_t (*read) (struct file *, char __user *, size_t, loff_t *)
 */
-#define USE_OLD_STYPE_1206 0
-#if USE_OLD_STYPE_1206
-static int SYSRAM_ReadFlag(
-	char *pPage,
-	char **ppStart,
-	off_t   Off,
-	int     Count,
-	int *pEof,
-	void *pData)
-#else /* new file_operations style */
 static ssize_t SYSRAM_ReadFlag(
 	struct file *pFile,
 	char *pStart,
 	size_t  Off,
 	loff_t *Count)
-#endif
-{
-#if USE_OLD_STYPE_1206
-	char *p = pPage;
-	MUINT32 len = 0;
-
-	p += sprintf(p, "\r\n[SYSRAM_ReadFlag]\r\n");
-	p += sprintf(p, "=========================================\r\n");
 	p += sprintf(p, "Sysram.DebugFlag = 0x%08lX\r\n", Sysram.DebugFlag);
 
 	*ppStart = pPage + Off;
@@ -1255,42 +1220,23 @@ static ssize_t SYSRAM_ReadFlag(
 	LOG_ERR("SYSRAM_ReadFlag: Not implement");
 	return 0;
 #endif
+=======
+{
+	LOG_ERR("SYSRAM_ReadFlag: Not implement");
+	return 0;
 }
 /* ------------------------------------------------------------------------------ */
 /*
 ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *)
 */
-#define USE_OLD_STYPE_1249 0
-#if USE_OLD_STYPE_1249
-static int SYSRAM_WriteFlag(
-	struct file *pFile,
-	const char *pBuffer,
-	unsigned long   Count,
-	void *pData)
-#else /* new file_operations style */
 static ssize_t SYSRAM_WriteFlag(
 	struct file *pFile,
 	const char *pBuffer,
 	size_t Count,
 	loff_t *pData)
-#endif
 {
-#if USE_OLD_STYPE_1249
-	char acBuf[32];
-	MUINT32 u4CopySize = 0;
-	MUINT32 u4SysramDbgFlag = 0;
-
-	u4CopySize = (Count < (sizeof(acBuf) - 1)) ? Count : (sizeof(acBuf) - 1);
-	if (copy_from_user(acBuf, pBuffer, u4CopySize))
-		return 0;
-	acBuf[u4CopySize] = '\0';
-	if (3 == sscanf(acBuf, "%lx", &u4SysramDbgFlag))
-		Sysram.DebugFlag = u4SysramDbgFlag;
-	return Count;
-#else /* new file_operations style */
 	LOG_ERR("SYSRAM_WriteFlag: Not implement");
 	return 0;
-#endif
 }
 /*******************************************************************************
 *

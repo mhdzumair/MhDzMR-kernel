@@ -492,7 +492,7 @@ static int rawv6_recvmsg(struct kiocb *iocb, struct sock *sk,
 			goto csum_copy_err;
 		err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 	} else {
-		err = skb_copy_and_csum_datagram_iovec(skb, 0, msg->msg_iov, copied);
+		err = skb_copy_and_csum_datagram_iovec(skb, 0, msg->msg_iov);
 		if (err == -EINVAL)
 			goto csum_copy_err;
 	}
@@ -1297,7 +1297,7 @@ void raw6_proc_exit(void)
 #endif	/* CONFIG_PROC_FS */
 
 /* Same as inet6_dgram_ops, sans udp_poll.  */
-const struct proto_ops inet6_sockraw_ops = {
+static const struct proto_ops inet6_sockraw_ops = {
 	.family		   = PF_INET6,
 	.owner		   = THIS_MODULE,
 	.release	   = inet6_release,

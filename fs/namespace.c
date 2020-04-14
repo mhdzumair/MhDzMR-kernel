@@ -568,7 +568,6 @@ int sb_prepare_remount_readonly(struct super_block *sb)
 
 static void free_vfsmnt(struct mount *mnt)
 {
-	kfree(mnt->mnt.data);
 	kfree(mnt->mnt_devname);
 #ifdef CONFIG_SMP
 	free_percpu(mnt->mnt_pcp);
@@ -591,21 +590,12 @@ bool legitimize_mnt(struct vfsmount *bastard, unsigned seq)
 		return true;
 	mnt = real_mount(bastard);
 	mnt_add_count(mnt, 1);
-	smp_mb();			// see mntput_no_expire()
 	if (likely(!read_seqretry(&mount_lock, seq)))
 		return true;
 	if (bastard->mnt_flags & MNT_SYNC_UMOUNT) {
 		mnt_add_count(mnt, -1);
 		return false;
 	}
-	lock_mount_hash();
-	if (unlikely(bastard->mnt_flags & MNT_DOOMED)) {
-		mnt_add_count(mnt, -1);
-		unlock_mount_hash();
-		return true;
-	}
-	unlock_mount_hash();
-
 	rcu_read_unlock();
 	mntput(bastard);
 	rcu_read_lock();
@@ -916,22 +906,11 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
 
- 
-	mnt->mnt.data = NULL;
-	if (type->alloc_mnt_data) {
-		mnt->mnt.data = type->alloc_mnt_data();
-		if (!mnt->mnt.data) {
-			mnt_free_id(mnt);
-			free_vfsmnt(mnt);
-			return ERR_PTR(-ENOMEM);
-		}
-	}
 	if (flags & MS_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
 	root = mount_fs(type, flags, name, data);
 	if (IS_ERR(root)) {
-		kfree(mnt->mnt.data);
 		mnt_free_id(mnt);
 		free_vfsmnt(mnt);
 		return ERR_CAST(root);
@@ -959,15 +938,6 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
 
-	if (sb->s_op->clone_mnt_data) {
-		mnt->mnt.data = sb->s_op->clone_mnt_data(old->mnt.data);
-		if (!mnt->mnt.data) {
-			err = -ENOMEM;
-			goto out_free;
-		}
-	}
-
-
 	if (flag & (CL_SLAVE | CL_PRIVATE | CL_SHARED_TO_SLAVE))
 		mnt->mnt_group_id = 0; /* not a peer of original */
 	else
@@ -979,8 +949,7 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 			goto out_free;
 	}
 
-	mnt->mnt.mnt_flags = old->mnt.mnt_flags;
-	mnt->mnt.mnt_flags &= ~(MNT_WRITE_HOLD|MNT_MARKED|MNT_INTERNAL);
+	mnt->mnt.mnt_flags = old->mnt.mnt_flags & ~(MNT_WRITE_HOLD|MNT_MARKED);
 	/* Don't allow unprivileged users to change mount flags */
 	if (flag & CL_UNPRIVILEGED) {
 		mnt->mnt.mnt_flags |= MNT_LOCK_ATIME;
@@ -1036,7 +1005,6 @@ static struct mount *clone_mnt(struct mount *old, struct dentry *root,
 	return mnt;
 
  out_free:
-	kfree(mnt->mnt.data);
 	mnt_free_id(mnt);
 	free_vfsmnt(mnt);
 	return ERR_PTR(err);
@@ -1085,27 +1053,12 @@ static DECLARE_DELAYED_WORK(delayed_mntput_work, delayed_mntput);
 static void mntput_no_expire(struct mount *mnt)
 {
 	rcu_read_lock();
-	if (likely(READ_ONCE(mnt->mnt_ns))) {
-		/*
-		 * Since we don't do lock_mount_hash() here,
-		 * ->mnt_ns can change under us.  However, if it's
-		 * non-NULL, then there's a reference that won't
-		 * be dropped until after an RCU delay done after
-		 * turning ->mnt_ns NULL.  So if we observe it
-		 * non-NULL under rcu_read_lock(), the reference
-		 * we are dropping is not the final one.
-		 */
-		mnt_add_count(mnt, -1);
+	mnt_add_count(mnt, -1);
+	if (likely(mnt->mnt_ns)) { /* shouldn't be the last one */
 		rcu_read_unlock();
 		return;
 	}
 	lock_mount_hash();
-	/*
-	 * make sure that if __legitimize_mnt() has not seen us grab
-	 * mount_lock, we'll see their refcount increment here.
-	 */
-	smp_mb();
-	mnt_add_count(mnt, -1);
 	if (mnt_get_count(mnt)) {
 		rcu_read_unlock();
 		unlock_mount_hash();
@@ -1505,13 +1458,8 @@ static int do_umount(struct mount *mnt, int flags)
 
 	namespace_lock();
 	lock_mount_hash();
-
-	/* Recheck MNT_LOCKED with the locks held */
-	retval = -EINVAL;
-	if (mnt->mnt.mnt_flags & MNT_LOCKED)
-		goto out;
-
 	event++;
+
 	if (flags & MNT_DETACH) {
 		if (!list_empty(&mnt->mnt_list))
 			umount_tree(mnt, UMOUNT_PROPAGATE);
@@ -1525,7 +1473,6 @@ static int do_umount(struct mount *mnt, int flags)
 			retval = 0;
 		}
 	}
-out:
 	unlock_mount_hash();
 	namespace_unlock();
 	return retval;
@@ -1552,7 +1499,6 @@ void __detach_mounts(struct dentry *dentry)
 		goto out_unlock;
 
 	lock_mount_hash();
-	event++;
 	while (!hlist_empty(&mp->m_list)) {
 		mnt = hlist_entry(mp->m_list.first, struct mount, mnt_mp_list);
 		umount_tree(mnt, 0);
@@ -1604,7 +1550,7 @@ SYSCALL_DEFINE2(umount, char __user *, name, int, flags)
 		goto dput_and_out;
 	if (!check_mnt(mnt))
 		goto dput_and_out;
-	if (mnt->mnt.mnt_flags & MNT_LOCKED) /* Check optimistically */
+	if (mnt->mnt.mnt_flags & MNT_LOCKED)
 		goto dput_and_out;
 	retval = -EPERM;
 	if (flags & MNT_FORCE && !capable(CAP_SYS_ADMIN))
@@ -1688,14 +1634,8 @@ struct mount *copy_tree(struct mount *mnt, struct dentry *dentry,
 			struct mount *t = NULL;
 			if (!(flag & CL_COPY_UNBINDABLE) &&
 			    IS_MNT_UNBINDABLE(s)) {
-				if (s->mnt.mnt_flags & MNT_LOCKED) {
-					/* Both unbindable and locked. */
-					q = ERR_PTR(-EPERM);
-					goto out;
-				} else {
-					s = skip_mnt_tree(s);
-					continue;
-				}
+				s = skip_mnt_tree(s);
+				continue;
 			}
 			if (!(flag & CL_COPY_MNT_NS_FILE) &&
 			    is_mnt_ns_file(s->mnt.mnt_root)) {
@@ -1755,7 +1695,7 @@ void drop_collected_mounts(struct vfsmount *mnt)
 {
 	namespace_lock();
 	lock_mount_hash();
-	umount_tree(real_mount(mnt), 0);
+	umount_tree(real_mount(mnt), UMOUNT_SYNC);
 	unlock_mount_hash();
 	namespace_unlock();
 }
@@ -2202,14 +2142,8 @@ static int do_remount(struct path *path, int flags, int mnt_flags,
 		err = change_mount_flags(path->mnt, flags);
 	else if (!capable(CAP_SYS_ADMIN))
 		err = -EPERM;
-	else {
+	else
 		err = do_remount_sb(sb, flags, data, 0);
-		namespace_lock();
-		lock_mount_hash();
-		propagate_remount(mnt);
-		unlock_mount_hash();
-		namespace_unlock();
-	}
 	if (!err) {
 		lock_mount_hash();
 		mnt_flags |= mnt->mnt.mnt_flags & ~MNT_USER_SETTABLE_MASK;
@@ -2402,10 +2336,8 @@ static int do_new_mount(struct path *path, const char *fstype, int flags,
 			mnt_flags |= MNT_NODEV | MNT_LOCK_NODEV;
 		}
 		if (type->fs_flags & FS_USERNS_VISIBLE) {
-			if (!fs_fully_visible(type, &mnt_flags)) {
-				put_filesystem(type);
+			if (!fs_fully_visible(type, &mnt_flags))
 				return -EPERM;
-			}
 		}
 	}
 
@@ -3246,7 +3178,7 @@ static bool fs_fully_visible(struct file_system_type *type, int *new_mnt_flags)
 		list_for_each_entry(child, &mnt->mnt_mounts, mnt_child) {
 			struct inode *inode = child->mnt_mountpoint->d_inode;
 			/* Only worry about locked mounts */
-			if (!(child->mnt.mnt_flags & MNT_LOCKED))
+			if (!(mnt->mnt.mnt_flags & MNT_LOCKED))
 				continue;
 			if (!S_ISDIR(inode->i_mode))
 				goto next;

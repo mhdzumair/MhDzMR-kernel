@@ -368,13 +368,13 @@ static void replenish_dl_entity(struct sched_dl_entity *dl_se,
  *
  * This function returns true if:
  *
- *   runtime / (deadline - t) > dl_runtime / dl_deadline ,
+ *   runtime / (deadline - t) > dl_runtime / dl_period ,
  *
  * IOW we can't recycle current parameters.
  *
- * Notice that the bandwidth check is done against the deadline. For
+ * Notice that the bandwidth check is done against the period. For
  * task with deadline equal to period this is the same of using
- * dl_period instead of dl_deadline in the equation above.
+ * dl_deadline instead of dl_period in the equation above.
  */
 static bool dl_entity_overflow(struct sched_dl_entity *dl_se,
 			       struct sched_dl_entity *pi_se, u64 t)
@@ -399,7 +399,7 @@ static bool dl_entity_overflow(struct sched_dl_entity *dl_se,
 	 * of anything below microseconds resolution is actually fiction
 	 * (but still we want to give the user that illusion >;).
 	 */
-	left = (pi_se->dl_deadline >> DL_SCALE) * (dl_se->runtime >> DL_SCALE);
+	left = (pi_se->dl_period >> DL_SCALE) * (dl_se->runtime >> DL_SCALE);
 	right = ((dl_se->deadline - t) >> DL_SCALE) *
 		(pi_se->dl_runtime >> DL_SCALE);
 
@@ -682,7 +682,7 @@ static void inc_dl_deadline(struct dl_rq *dl_rq, u64 deadline)
 		 */
 		dl_rq->earliest_dl.next = dl_rq->earliest_dl.curr;
 		dl_rq->earliest_dl.curr = deadline;
-		cpudl_set(&rq->rd->cpudl, rq->cpu, deadline);
+		cpudl_set(&rq->rd->cpudl, rq->cpu, deadline, 1);
 	} else if (dl_rq->earliest_dl.next == 0 ||
 		   dl_time_before(deadline, dl_rq->earliest_dl.next)) {
 		/*
@@ -706,7 +706,7 @@ static void dec_dl_deadline(struct dl_rq *dl_rq, u64 deadline)
 	if (!dl_rq->dl_nr_running) {
 		dl_rq->earliest_dl.curr = 0;
 		dl_rq->earliest_dl.next = 0;
-		cpudl_clear(&rq->rd->cpudl, rq->cpu);
+		cpudl_set(&rq->rd->cpudl, rq->cpu, 0, 0);
 	} else {
 		struct rb_node *leftmost = dl_rq->rb_leftmost;
 		struct sched_dl_entity *entry;
@@ -714,7 +714,7 @@ static void dec_dl_deadline(struct dl_rq *dl_rq, u64 deadline)
 		entry = rb_entry(leftmost, struct sched_dl_entity, rb_node);
 		dl_rq->earliest_dl.curr = entry->deadline;
 		dl_rq->earliest_dl.next = next_deadline(rq);
-		cpudl_set(&rq->rd->cpudl, rq->cpu, entry->deadline);
+		cpudl_set(&rq->rd->cpudl, rq->cpu, entry->deadline, 1);
 	}
 }
 
@@ -1170,6 +1170,9 @@ static int find_later_rq(struct task_struct *task)
 	 * We have to consider system topology and task affinity
 	 * first, then we can look for a suitable cpu.
 	 */
+	cpumask_copy(later_mask, task_rq(task)->rd->span);
+	cpumask_and(later_mask, later_mask, cpu_active_mask);
+	cpumask_and(later_mask, later_mask, &task->cpus_allowed);
 	best_cpu = cpudl_find(&task_rq(task)->rd->cpudl,
 			task, later_mask);
 	if (best_cpu == -1)
@@ -1542,9 +1545,8 @@ static void rq_online_dl(struct rq *rq)
 	if (rq->dl.overloaded)
 		dl_set_overload(rq);
 
-	cpudl_set_freecpu(&rq->rd->cpudl, rq->cpu);
 	if (rq->dl.dl_nr_running > 0)
-		cpudl_set(&rq->rd->cpudl, rq->cpu, rq->dl.earliest_dl.curr);
+		cpudl_set(&rq->rd->cpudl, rq->cpu, rq->dl.earliest_dl.curr, 1);
 }
 
 /* Assumes rq->lock is held */
@@ -1553,8 +1555,7 @@ static void rq_offline_dl(struct rq *rq)
 	if (rq->dl.overloaded)
 		dl_clear_overload(rq);
 
-	cpudl_clear(&rq->rd->cpudl, rq->cpu);
-	cpudl_clear_freecpu(&rq->rd->cpudl, rq->cpu);
+	cpudl_set(&rq->rd->cpudl, rq->cpu, 0, 0);
 }
 
 void init_sched_dl_class(void)

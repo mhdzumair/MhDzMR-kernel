@@ -71,8 +71,7 @@ static struct devalarm alarms[ANDROID_ALARM_TYPE_COUNT];
 static int is_wakeup(enum android_alarm_type type)
 {
 	return (type == ANDROID_ALARM_RTC_WAKEUP ||
-		type == ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP ||
-		type == ANDROID_ALARM_POWER_ON);
+		type == ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP);
 }
 
 
@@ -108,7 +107,6 @@ void alarm_set_power_on(struct timespec new_pwron_time, bool logo)
 
 	alarm_dbg(INFO, "alarm set power on\n");
 
-#define RTC_PWRON_SEC -90
 #ifdef RTC_PWRON_SEC
 	/* round down the second */
 	new_pwron_time.tv_sec = (new_pwron_time.tv_sec / 60) * 60;
@@ -542,8 +540,6 @@ static int __init alarm_dev_init(void)
 			ALARM_REALTIME, devalarm_alarmhandler);
 	hrtimer_init(&alarms[ANDROID_ALARM_RTC].u.hrt,
 			CLOCK_REALTIME, HRTIMER_MODE_ABS);
-	alarm_init(&alarms[ANDROID_ALARM_POWER_ON].u.alrm,
-			ALARM_REALTIME, devalarm_alarmhandler);
 	alarm_init(&alarms[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].u.alrm,
 			ALARM_BOOTTIME, devalarm_alarmhandler);
 	hrtimer_init(&alarms[ANDROID_ALARM_ELAPSED_REALTIME].u.hrt,

@@ -1,4 +1,3 @@
-
 /*
  * SLUB: A slab allocator that limits cache line use instead of queuing
  * objects in per cpu and per node lists.
@@ -760,7 +759,7 @@ static void object_err(struct kmem_cache *s, struct page *page,
 	BUG();
 }
 
-static __printf(3, 4) void slab_err(struct kmem_cache *s, struct page *page,
+static void slab_err(struct kmem_cache *s, struct page *page,
 			const char *fmt, ...)
 {
 	va_list args;
@@ -1728,7 +1727,7 @@ static void *get_partial_node(struct kmem_cache *s, struct kmem_cache_node *n,
 {
 	struct page *page, *page2;
 	void *object = NULL;
-	unsigned int available = 0;
+	int available = 0;
 	int objects;
 
 	/*
@@ -4632,10 +4631,10 @@ static ssize_t cpu_partial_show(struct kmem_cache *s, char *buf)
 static ssize_t cpu_partial_store(struct kmem_cache *s, const char *buf,
 				 size_t length)
 {
-	unsigned int objects;
+	unsigned long objects;
 	int err;
 
-	err = kstrtouint(buf, 10, &objects);
+	err = kstrtoul(buf, 10, &objects);
 	if (err)
 		return err;
 	if (objects && !kmem_cache_has_cpu_partial(s))
@@ -5225,7 +5224,6 @@ static void memcg_propagate_slab_attrs(struct kmem_cache *s)
 		char mbuf[64];
 		char *buf;
 		struct slab_attribute *attr = to_slab_attr(slab_attrs[i]);
-		ssize_t len;
 
 		if (!attr || !attr->store || !attr->show)
 			continue;
@@ -5250,9 +5248,8 @@ static void memcg_propagate_slab_attrs(struct kmem_cache *s)
 			buf = buffer;
 		}
 
-		len = attr->show(root_cache, buf);
-		if (len > 0)
-			attr->store(s, buf, len);
+		attr->show(root_cache, buf);
+		attr->store(s, buf, strlen(buf));
 	}
 
 	if (buffer)

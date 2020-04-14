@@ -303,8 +303,9 @@ int calc_lanman_hash(const char *password, const char *cryptkey, bool encrypt,
 {
 	int i;
 	int rc;
-	char password_with_pad[CIFS_ENCPWD_SIZE] = {0};
+	char password_with_pad[CIFS_ENCPWD_SIZE];
 
+	memset(password_with_pad, 0, CIFS_ENCPWD_SIZE);
 	if (password)
 		strncpy(password_with_pad, password, CIFS_ENCPWD_SIZE);
 
@@ -726,26 +727,24 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 
 	memcpy(ses->auth_key.response + baselen, tiblob, tilen);
 
-	mutex_lock(&ses->server->srv_mutex);
-
 	rc = crypto_hmacmd5_alloc(ses->server);
 	if (rc) {
 		cifs_dbg(VFS, "could not crypto alloc hmacmd5 rc %d\n", rc);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	/* calculate ntlmv2_hash */
 	rc = calc_ntlmv2_hash(ses, ntlmv2_hash, nls_cp);
 	if (rc) {
 		cifs_dbg(VFS, "could not get v2 hash rc %d\n", rc);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	/* calculate first part of the client response (CR1) */
 	rc = CalcNTLMv2_response(ses, ntlmv2_hash);
 	if (rc) {
 		cifs_dbg(VFS, "Could not calculate CR1 rc: %d\n", rc);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	/* now calculate the session key for NTLMv2 */
@@ -754,13 +753,13 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 	if (rc) {
 		cifs_dbg(VFS, "%s: Could not set NTLMV2 Hash as a key\n",
 			 __func__);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	rc = crypto_shash_init(&ses->server->secmech.sdeschmacmd5->shash);
 	if (rc) {
 		cifs_dbg(VFS, "%s: Could not init hmacmd5\n", __func__);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	rc = crypto_shash_update(&ses->server->secmech.sdeschmacmd5->shash,
@@ -768,7 +767,7 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 		CIFS_HMAC_MD5_HASH_SIZE);
 	if (rc) {
 		cifs_dbg(VFS, "%s: Could not update with response\n", __func__);
-		goto unlock;
+		goto setup_ntlmv2_rsp_ret;
 	}
 
 	rc = crypto_shash_final(&ses->server->secmech.sdeschmacmd5->shash,
@@ -776,8 +775,6 @@ setup_ntlmv2_rsp(struct cifs_ses *ses, const struct nls_table *nls_cp)
 	if (rc)
 		cifs_dbg(VFS, "%s: Could not generate md5 hash\n", __func__);
 
-unlock:
-	mutex_unlock(&ses->server->srv_mutex);
 setup_ntlmv2_rsp_ret:
 	kfree(tiblob);
 

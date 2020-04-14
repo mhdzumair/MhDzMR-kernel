@@ -199,6 +199,11 @@ static int snd_usb_copy_string_desc(struct mixer_build *state,
 				    int index, char *buf, int maxlen)
 {
 	int len = usb_string(state->chip->dev, index, buf, maxlen - 1);
+
+	if (len < 0)
+		len = 0;
+
+	buf[len] = 0;
 	return len;
 }
 
@@ -878,14 +883,6 @@ static void volume_control_quirks(struct usb_mixer_elem_info *cval,
 		}
 		break;
 
-	case USB_ID(0x0d8c, 0x0103):
-		if (!strcmp(kctl->id.name, "PCM Playback Volume")) {
-			usb_audio_info(chip,
-				 "set volume quirk for CM102-A+/102S+\n");
-			cval->min = -256;
-		}
-		break;
-
 	case USB_ID(0x0471, 0x0101):
 	case USB_ID(0x0471, 0x0104):
 	case USB_ID(0x0471, 0x0105):
@@ -1028,10 +1025,8 @@ static int get_min_max_with_quirks(struct usb_mixer_elem_info *cval,
 	/* USB descriptions contain the dB scale in 1/256 dB unit
 	 * while ALSA TLV contains in 1/100 dB unit
 	 */
-	cval->dBmin =
-		(convert_signed_value(cval, cval->min) * 100) / (cval->res);
-	cval->dBmax =
-		(convert_signed_value(cval, cval->max) * 100) / (cval->res);
+	cval->dBmin = (convert_signed_value(cval, cval->min) * 100) / 256;
+	cval->dBmax = (convert_signed_value(cval, cval->max) * 100) / 256;
 	if (cval->dBmin > cval->dBmax) {
 		/* something is wrong; assume it's either from/to 0dB */
 		if (cval->dBmin < 0)
@@ -1342,8 +1337,6 @@ static void build_feature_ctl(struct mixer_build *state, void *raw_desc,
 				SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK;
 		}
 	}
-
-	snd_usb_mixer_fu_apply_quirk(state->mixer, cval, unitid, kctl);
 
 	range = (cval->max - cval->min) / cval->res;
 	/*
@@ -1783,7 +1776,7 @@ static int build_audio_procunit(struct mixer_build *state, int unitid,
 				char *name)
 {
 	struct uac_processing_unit_descriptor *desc = raw_desc;
-	int num_ins;
+	int num_ins = desc->bNrInPins;
 	struct usb_mixer_elem_info *cval;
 	struct snd_kcontrol *kctl;
 	int i, err, nameid, type, len;
@@ -1798,13 +1791,7 @@ static int build_audio_procunit(struct mixer_build *state, int unitid,
 		0, NULL, default_value_info
 	};
 
-	if (desc->bLength < 13) {
-		usb_audio_err(state->chip, "invalid %s descriptor (id %d)\n", name, unitid);
-		return -EINVAL;
-	}
-
-	num_ins = desc->bNrInPins;
-	if (desc->bLength < 13 + num_ins ||
+	if (desc->bLength < 13 || desc->bLength < 13 + num_ins ||
 	    desc->bLength < num_ins + uac_processing_unit_bControlSize(desc, state->mixer->protocol)) {
 		usb_audio_err(state->chip, "invalid %s descriptor (id %d)\n", name, unitid);
 		return -EINVAL;
@@ -2173,6 +2160,9 @@ static int parse_audio_unit(struct mixer_build *state, int unitid)
 
 static void snd_usb_mixer_free(struct usb_mixer_interface *mixer)
 {
+	/* kill pending URBs */
+	snd_usb_mixer_disconnect(&mixer->list);
+
 	kfree(mixer->id_elems);
 	if (mixer->urb) {
 		kfree(mixer->urb->transfer_buffer);
@@ -2509,8 +2499,13 @@ void snd_usb_mixer_disconnect(struct list_head *p)
 	struct usb_mixer_interface *mixer;
 
 	mixer = list_entry(p, struct usb_mixer_interface, list);
-	usb_kill_urb(mixer->urb);
-	usb_kill_urb(mixer->rc_urb);
+	if (mixer->disconnected)
+		return;
+	if (mixer->urb)
+		usb_kill_urb(mixer->urb);
+	if (mixer->rc_urb)
+		usb_kill_urb(mixer->rc_urb);
+	mixer->disconnected = true;
 }
 
 #ifdef CONFIG_PM

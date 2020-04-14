@@ -403,7 +403,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig)
 	set_task_stack_end_magic(tsk);
 
 #ifdef CONFIG_CC_STACKPROTECTOR
-	tsk->stack_canary = get_random_long();
+	tsk->stack_canary = get_random_int();
 #endif
 
 	/*
@@ -712,26 +712,6 @@ void __mmdrop(struct mm_struct *mm)
 }
 EXPORT_SYMBOL_GPL(__mmdrop);
 
-static inline void __mmput(struct mm_struct *mm)
-{
-	VM_BUG_ON(atomic_read(&mm->mm_users));
-
-	uprobe_clear_state(mm);
-	exit_aio(mm);
-	ksm_exit(mm);
-	khugepaged_exit(mm); /* must run before exit_mmap */
-	exit_mmap(mm);
-	set_mm_exe_file(mm, NULL);
-	if (!list_empty(&mm->mmlist)) {
-		spin_lock(&mmlist_lock);
-		list_del(&mm->mmlist);
-		spin_unlock(&mmlist_lock);
-	}
-	if (mm->binfmt)
-		module_put(mm->binfmt->module);
-	mmdrop(mm);
-}
-
 /*
  * Decrement the use count and release all resources for an mm.
  */
@@ -739,24 +719,24 @@ void mmput(struct mm_struct *mm)
 {
 	might_sleep();
 
-	if (atomic_dec_and_test(&mm->mm_users))
-		__mmput(mm);
-}
-EXPORT_SYMBOL_GPL(mmput);
-
-static void mmput_async_fn(struct work_struct *work)
-{
-	struct mm_struct *mm = container_of(work, struct mm_struct, async_put_work);
-	__mmput(mm);
-}
-
-void mmput_async(struct mm_struct *mm)
-{
 	if (atomic_dec_and_test(&mm->mm_users)) {
-		INIT_WORK(&mm->async_put_work, mmput_async_fn);
-		schedule_work(&mm->async_put_work);
+		uprobe_clear_state(mm);
+		exit_aio(mm);
+		ksm_exit(mm);
+		khugepaged_exit(mm); /* must run before exit_mmap */
+		exit_mmap(mm);
+		set_mm_exe_file(mm, NULL);
+		if (!list_empty(&mm->mmlist)) {
+			spin_lock(&mmlist_lock);
+			list_del(&mm->mmlist);
+			spin_unlock(&mmlist_lock);
+		}
+		if (mm->binfmt)
+			module_put(mm->binfmt->module);
+		mmdrop(mm);
 	}
 }
+EXPORT_SYMBOL_GPL(mmput);
 
 void set_mm_exe_file(struct mm_struct *mm, struct file *new_exe_file)
 {
@@ -824,8 +804,7 @@ struct mm_struct *mm_access(struct task_struct *task, unsigned int mode)
 
 	mm = get_task_mm(task);
 	if (mm && mm != current->mm &&
-			!ptrace_may_access(task, mode) &&
-			!capable(CAP_SYS_RESOURCE)) {
+			!ptrace_may_access(task, mode)) {
 		mmput(mm);
 		mm = ERR_PTR(-EACCES);
 	}
@@ -1435,6 +1414,8 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 
 	posix_cpu_timers_init(p);
 
+	p->start_time = ktime_get_ns();
+	p->real_start_time = ktime_get_boot_ns();
 	p->io_context = NULL;
 	p->audit_context = NULL;
 	if (clone_flags & CLONE_THREAD)
@@ -1605,17 +1586,6 @@ static struct task_struct *copy_process(unsigned long clone_flags,
 	}
 
 	spin_lock(&current->sighand->siglock);
-
-	/*
-	 * From this point on we must avoid any synchronous user-space
-	 * communication until we take the tasklist-lock. In particular, we do
-	 * not want user-space to be able to predict the process start-time by
-	 * stalling fork(2) after we recorded the start_time but before it is
-	 * visible to the system.
-	 */
-
-	p->start_time = ktime_get_ns();
-	p->real_start_time = ktime_get_boot_ns();
 
 	/*
 	 * Copy seccomp details explicitly here, in case they were changed

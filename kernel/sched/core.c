@@ -636,9 +636,9 @@ void resched_cpu(int cpu)
 	struct rq *rq = cpu_rq(cpu);
 	unsigned long flags;
 
-	raw_spin_lock_irqsave(&rq->lock, flags);
-	if (cpu_online(cpu) || cpu == smp_processor_id())
-		resched_curr(rq);
+	if (!raw_spin_trylock_irqsave(&rq->lock, flags))
+		return;
+	resched_curr(rq);
 	raw_spin_unlock_irqrestore(&rq->lock, flags);
 }
 
@@ -1167,7 +1167,7 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 		if (p->sched_class->migrate_task_rq)
 			p->sched_class->migrate_task_rq(p, new_cpu);
 		p->se.nr_migrations++;
-		perf_sw_event_sched(PERF_COUNT_SW_CPU_MIGRATIONS, 1, 0);
+		perf_sw_event(PERF_COUNT_SW_CPU_MIGRATIONS, 1, NULL, 0);
 	}
 
 	__set_task_cpu(p, new_cpu);
@@ -1808,28 +1808,6 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	success = 1; /* we're going to change ->state */
 	cpu = task_cpu(p);
 
-	/*
-	 * Ensure we load p->on_rq _after_ p->state, otherwise it would
-	 * be possible to, falsely, observe p->on_rq == 0 and get stuck
-	 * in smp_cond_load_acquire() below.
-	 *
-	 * sched_ttwu_pending()                 try_to_wake_up()
-	 *   [S] p->on_rq = 1;                  [L] P->state
-	 *       UNLOCK rq->lock  -----.
-	 *                              \
-	 *				 +---   RMB
-	 * schedule()                   /
-	 *       LOCK rq->lock    -----'
-	 *       UNLOCK rq->lock
-	 *
-	 * [task p]
-	 *   [S] p->state = UNINTERRUPTIBLE     [L] p->on_rq
-	 *
-	 * Pairs with the UNLOCK+LOCK on rq->lock from the
-	 * last wakeup of our task and the schedule that got our task
-	 * current.
-	 */
-	smp_rmb();
 	if (p->on_rq && ttwu_remote(p, wake_flags))
 		goto stat;
 
@@ -3664,20 +3642,6 @@ static bool check_same_owner(struct task_struct *p)
 	return match;
 }
 
-static bool dl_param_changed(struct task_struct *p,
-		const struct sched_attr *attr)
-{
-	struct sched_dl_entity *dl_se = &p->dl;
-
-	if (dl_se->dl_runtime != attr->sched_runtime ||
-		dl_se->dl_deadline != attr->sched_deadline ||
-		dl_se->dl_period != attr->sched_period ||
-		dl_se->flags != attr->sched_flags)
-		return true;
-
-	return false;
-}
-
 static int __sched_setscheduler(struct task_struct *p,
 				const struct sched_attr *attr,
 				bool user)
@@ -3833,7 +3797,7 @@ recheck:
 			goto change;
 		if (rt_policy(policy) && attr->sched_priority != p->rt_priority)
 			goto change;
-		if (dl_policy(policy) && dl_param_changed(p, attr))
+		if (dl_policy(policy))
 			goto change;
 
 		p->sched_reset_on_fork = reset_on_fork;
@@ -4907,15 +4871,13 @@ void show_state_filter(unsigned long state_filter)
 		/*
 		 * reset the NMI-timeout, listing all files on a slow
 		 * console might take a lot of time:
-		 * Also, reset softlockup watchdogs on all CPUs, because
-		 * another CPU might be blocked waiting for us to process
-		 * an IPI.
 		 */
 		touch_nmi_watchdog();
-		touch_all_softlockup_watchdogs();
 		if (!state_filter || (p->state & state_filter))
 			sched_show_task(p);
 	}
+
+	touch_all_softlockup_watchdogs();
 
 #ifdef CONFIG_SCHED_DEBUG
 	sysrq_sched_debug_show();
@@ -6135,9 +6097,6 @@ enum s_alloc {
  * Build an iteration mask that can exclude certain CPUs from the upwards
  * domain traversal.
  *
- * Only CPUs that can arrive at this group should be considered to continue
- * balancing.
- *
  * Asymmetric node setups can result in situations where the domain tree is of
  * unequal depth, make sure to skip domains that already cover the entire
  * range.
@@ -6149,31 +6108,18 @@ enum s_alloc {
  */
 static void build_group_mask(struct sched_domain *sd, struct sched_group *sg)
 {
-	const struct cpumask *sg_span = sched_group_cpus(sg);
+	const struct cpumask *span = sched_domain_span(sd);
 	struct sd_data *sdd = sd->private;
 	struct sched_domain *sibling;
 	int i;
 
-	for_each_cpu(i, sg_span) {
+	for_each_cpu(i, span) {
 		sibling = *per_cpu_ptr(sdd->sd, i);
-
-		/*
-		 * Can happen in the asymmetric case, where these siblings are
-		 * unused. The mask will not be empty because those CPUs that
-		 * do have the top domain _should_ span the domain.
-		 */
-		if (!sibling->child)
-			continue;
-
-		/* If we would not end up here, we can't continue from here */
-		if (!cpumask_equal(sg_span, sched_domain_span(sibling->child)))
+		if (!cpumask_test_cpu(i, sched_domain_span(sibling)))
 			continue;
 
 		cpumask_set_cpu(i, sched_group_mask(sg));
 	}
-
-	/* We must not have empty masks here */
-	WARN_ON_ONCE(cpumask_empty(sched_group_mask(sg)));
 }
 
 /*

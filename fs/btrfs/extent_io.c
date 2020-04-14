@@ -2163,7 +2163,7 @@ void btrfs_free_io_failure_record(struct inode *inode, u64 start, u64 end)
 
 		next = next_state(state);
 
-		failrec = (struct io_failure_record *)(unsigned long)state->private;
+		failrec = (struct io_failure_record *)state->private;
 		free_extent_state(state);
 		kfree(failrec);
 
@@ -2438,7 +2438,7 @@ int end_extent_writepage(struct page *page, int err, u64 start, u64 end)
 	if (!uptodate) {
 		ClearPageUptodate(page);
 		SetPageError(page);
-		ret = err < 0 ? err : -EIO;
+		ret = ret < 0 ? ret : -EIO;
 		mapping_set_error(page->mapping, ret);
 	}
 	return 0;
@@ -3015,11 +3015,11 @@ static int __do_readpage(struct extent_io_tree *tree,
 		 */
 		if (test_bit(EXTENT_FLAG_COMPRESSED, &em->flags) &&
 		    prev_em_start && *prev_em_start != (u64)-1 &&
-		    *prev_em_start != em->start)
+		    *prev_em_start != em->orig_start)
 			force_bio_submit = true;
 
 		if (prev_em_start)
-			*prev_em_start = em->start;
+			*prev_em_start = em->orig_start;
 
 		free_extent_map(em);
 		em = NULL;

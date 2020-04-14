@@ -187,11 +187,12 @@ static int proc_keys_show(struct seq_file *m, void *v)
 	struct timespec now;
 	unsigned long timo;
 	key_ref_t key_ref, skey_ref;
-	char xbuf[16];
+	char xbuf[12];
 	int rc;
 
 	struct keyring_search_context ctx = {
-		.index_key		= key->index_key,
+		.index_key.type		= key->type,
+		.index_key.description	= key->description,
 		.cred			= current_cred(),
 		.match_data.cmp		= lookup_user_key_possessed,
 		.match_data.raw_data	= key,

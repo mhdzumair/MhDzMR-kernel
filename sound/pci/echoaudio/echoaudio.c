@@ -1990,11 +1990,6 @@ static int snd_echo_create(struct snd_card *card,
 	}
 	chip->dsp_registers = (volatile u32 __iomem *)
 		ioremap_nocache(chip->dsp_registers_phys, sz);
-	if (!chip->dsp_registers) {
-		dev_err(chip->card->dev, "ioremap failed\n");
-		snd_echo_free(chip);
-		return -ENOMEM;
-	}
 
 	if (request_irq(pci->irq, snd_echo_interrupt, IRQF_SHARED,
 			KBUILD_MODNAME, chip)) {
@@ -2252,11 +2247,11 @@ static int snd_echo_resume(struct device *dev)
 
 	DE_INIT(("resume start\n"));
 	pci_restore_state(pci);
-	commpage_bak = kmalloc(sizeof(*commpage), GFP_KERNEL);
+	commpage_bak = kmalloc(sizeof(struct echoaudio), GFP_KERNEL);
 	if (commpage_bak == NULL)
 		return -ENOMEM;
 	commpage = chip->comm_page;
-	memcpy(commpage_bak, commpage, sizeof(*commpage));
+	memcpy(commpage_bak, commpage, sizeof(struct comm_page));
 
 	err = init_hw(chip, chip->pci->device, chip->pci->subsystem_device);
 	if (err < 0) {

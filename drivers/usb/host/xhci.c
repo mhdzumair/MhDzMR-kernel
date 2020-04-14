@@ -1580,6 +1580,19 @@ int xhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 		xhci_urb_free_priv(xhci, urb_priv);
 		return ret;
 	}
+	if ((xhci->xhc_state & XHCI_STATE_DYING) ||
+			(xhci->xhc_state & XHCI_STATE_HALTED)) {
+		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
+				"Ep 0x%x: URB %p to be canceled on "
+				"non-responsive xHCI host.",
+				urb->ep->desc.bEndpointAddress, urb);
+		/* Let the stop endpoint command watchdog timer (which set this
+		 * state) finish cleaning up the endpoint TD lists.  We must
+		 * have caught it in the middle of dropping a lock and giving
+		 * back an URB.
+		 */
+		goto done;
+	}
 
 	ep_index = xhci_get_endpoint_index(&urb->ep->desc);
 	ep = &xhci->devs[urb->dev->slot_id]->eps[ep_index];
@@ -4415,14 +4428,6 @@ static u16 xhci_calculate_u1_timeout(struct xhci_hcd *xhci,
 {
 	unsigned long long timeout_ns;
 
-	/* Prevent U1 if service interval is shorter than U1 exit latency */
-	if (usb_endpoint_xfer_int(desc) || usb_endpoint_xfer_isoc(desc)) {
-		if (xhci_service_interval_to_ns(desc) <= udev->u1_params.mel) {
-			dev_dbg(&udev->dev, "Disable U1, ESIT shorter than exit latency\n");
-			return USB3_LPM_DISABLED;
-		}
-	}
-
 	if (xhci->quirks & XHCI_INTEL_HOST)
 		timeout_ns = xhci_calculate_intel_u1_timeout(udev, desc);
 	else
@@ -4478,14 +4483,6 @@ static u16 xhci_calculate_u2_timeout(struct xhci_hcd *xhci,
 		struct usb_endpoint_descriptor *desc)
 {
 	unsigned long long timeout_ns;
-
-	/* Prevent U2 if service interval is shorter than U2 exit latency */
-	if (usb_endpoint_xfer_int(desc) || usb_endpoint_xfer_isoc(desc)) {
-		if (xhci_service_interval_to_ns(desc) <= udev->u2_params.mel) {
-			dev_dbg(&udev->dev, "Disable U2, ESIT shorter than exit latency\n");
-			return USB3_LPM_DISABLED;
-		}
-	}
 
 	if (xhci->quirks & XHCI_INTEL_HOST)
 		timeout_ns = xhci_calculate_intel_u2_timeout(udev, desc);

@@ -171,7 +171,7 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 		addr = ALIGN(addr, huge_page_size(h));
 		vma = find_vma(mm, addr);
 		if (TASK_SIZE - len >= addr &&
-		    (!vma || addr + len <= vm_start_gap(vma)))
+		    (!vma || addr + len <= vma->vm_start))
 			return addr;
 	}
 
@@ -484,17 +484,11 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 					umode_t mode, dev_t dev)
 {
 	struct inode *inode;
-	struct resv_map *resv_map = NULL;
+	struct resv_map *resv_map;
 
-	/*
-	 * Reserve maps are only needed for inodes that can have associated
-	 * page allocations.
-	 */
-	if (S_ISREG(mode) || S_ISLNK(mode)) {
-		resv_map = resv_map_alloc();
-		if (!resv_map)
-			return NULL;
-	}
+	resv_map = resv_map_alloc();
+	if (!resv_map)
+		return NULL;
 
 	inode = new_inode(sb);
 	if (inode) {
@@ -536,10 +530,8 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 			break;
 		}
 		lockdep_annotate_inode_mutex_key(inode);
-	} else {
-		if (resv_map)
-			kref_put(&resv_map->refs, resv_map_release);
-	}
+	} else
+		kref_put(&resv_map->refs, resv_map_release);
 
 	return inode;
 }
@@ -617,18 +609,6 @@ static int hugetlbfs_migrate_page(struct address_space *mapping,
 	rc = migrate_huge_page_move_mapping(mapping, newpage, page);
 	if (rc != MIGRATEPAGE_SUCCESS)
 		return rc;
-
-	/*
-	 * page_private is subpool pointer in hugetlb pages.  Transfer to
-	 * new page.  PagePrivate is not associated with page_private for
-	 * hugetlb pages and can not be set here as only page_huge_active
-	 * pages can be migrated.
-	 */
-	if (page_private(page)) {
-		set_page_private(newpage, page_private(page));
-		set_page_private(page, 0);
-	}
-
 	migrate_page_copy(newpage, page);
 
 	return MIGRATEPAGE_SUCCESS;

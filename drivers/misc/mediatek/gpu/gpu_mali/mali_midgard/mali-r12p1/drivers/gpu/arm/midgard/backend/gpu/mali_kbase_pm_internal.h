@@ -29,7 +29,6 @@
 #include "mali_kbase_pm_ca.h"
 #include "mali_kbase_pm_policy.h"
 
-extern int g_mtk_gpu_efuse_set_already;
 
 /**
  * kbase_pm_dev_idle - The GPU is idle.

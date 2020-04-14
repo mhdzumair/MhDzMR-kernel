@@ -74,9 +74,6 @@ struct nfs_client {
 	/* idmapper */
 	struct idmap *		cl_idmap;
 
-	/* Client owner identifier */
-	const char *		cl_owner_id;
-
 	/* Our own IP address, as a null-terminated string.
 	 * This is used to generate the mv0 callback address.
 	 */

@@ -1670,16 +1670,16 @@ static int grec_size(struct ifmcaddr6 *pmc, int type, int gdel, int sdel)
 }
 
 static struct sk_buff *add_grhead(struct sk_buff *skb, struct ifmcaddr6 *pmc,
-	int type, struct mld2_grec **ppgr, unsigned int mtu)
+	int type, struct mld2_grec **ppgr)
 {
+	struct net_device *dev = pmc->idev->dev;
 	struct mld2_report *pmr;
 	struct mld2_grec *pgr;
 
-	if (!skb) {
-		skb = mld_newpack(pmc->idev, mtu);
-		if (!skb)
-			return NULL;
-	}
+	if (!skb)
+		skb = mld_newpack(pmc->idev, dev->mtu);
+	if (!skb)
+		return NULL;
 	pgr = (struct mld2_grec *)skb_put(skb, sizeof(struct mld2_grec));
 	pgr->grec_type = type;
 	pgr->grec_auxwords = 0;
@@ -1702,13 +1702,8 @@ static struct sk_buff *add_grec(struct sk_buff *skb, struct ifmcaddr6 *pmc,
 	struct mld2_grec *pgr = NULL;
 	struct ip6_sf_list *psf, *psf_next, *psf_prev, **psf_list;
 	int scount, stotal, first, isquery, truncate;
-	unsigned int mtu;
 
 	if (pmc->mca_flags & MAF_NOREPORT)
-		return skb;
-
-	mtu = READ_ONCE(dev->mtu);
-	if (mtu < IPV6_MIN_MTU)
 		return skb;
 
 	isquery = type == MLD2_MODE_IS_INCLUDE ||
@@ -1731,7 +1726,7 @@ static struct sk_buff *add_grec(struct sk_buff *skb, struct ifmcaddr6 *pmc,
 		    AVAILABLE(skb) < grec_size(pmc, type, gdeleted, sdeleted)) {
 			if (skb)
 				mld_sendpack(skb);
-			skb = mld_newpack(idev, mtu);
+			skb = mld_newpack(idev, dev->mtu);
 		}
 	}
 	first = 1;
@@ -1758,12 +1753,12 @@ static struct sk_buff *add_grec(struct sk_buff *skb, struct ifmcaddr6 *pmc,
 				pgr->grec_nsrcs = htons(scount);
 			if (skb)
 				mld_sendpack(skb);
-			skb = mld_newpack(idev, mtu);
+			skb = mld_newpack(idev, dev->mtu);
 			first = 1;
 			scount = 0;
 		}
 		if (first) {
-			skb = add_grhead(skb, pmc, type, &pgr, mtu);
+			skb = add_grhead(skb, pmc, type, &pgr);
 			first = 0;
 		}
 		if (!skb)
@@ -1797,7 +1792,7 @@ empty_source:
 				mld_sendpack(skb);
 				skb = NULL; /* add_grhead will get a new one */
 			}
-			skb = add_grhead(skb, pmc, type, &pgr, mtu);
+			skb = add_grhead(skb, pmc, type, &pgr);
 		}
 	}
 	if (pgr)
@@ -2062,8 +2057,7 @@ void ipv6_mc_dad_complete(struct inet6_dev *idev)
 		mld_send_initial_cr(idev);
 		idev->mc_dad_count--;
 		if (idev->mc_dad_count)
-			mld_dad_start_timer(idev,
-					    unsolicited_report_interval(idev));
+			mld_dad_start_timer(idev, idev->mc_maxdelay);
 	}
 }
 
@@ -2075,8 +2069,7 @@ static void mld_dad_timer_expire(unsigned long data)
 	if (idev->mc_dad_count) {
 		idev->mc_dad_count--;
 		if (idev->mc_dad_count)
-			mld_dad_start_timer(idev,
-					    unsolicited_report_interval(idev));
+			mld_dad_start_timer(idev, idev->mc_maxdelay);
 	}
 	in6_dev_put(idev);
 }
@@ -2391,17 +2384,17 @@ static int ip6_mc_leave_src(struct sock *sk, struct ipv6_mc_socklist *iml,
 {
 	int err;
 
-	write_lock_bh(&iml->sflock);
+	/* callers have the socket lock and rtnl lock
+	 * so no other readers or writers of iml or its sflist
+	 */
 	if (!iml->sflist) {
 		/* any-source empty exclude case */
-		err = ip6_mc_del_src(idev, &iml->addr, iml->sfmode, 0, NULL, 0);
-	} else {
-		err = ip6_mc_del_src(idev, &iml->addr, iml->sfmode,
-				iml->sflist->sl_count, iml->sflist->sl_addr, 0);
-		sock_kfree_s(sk, iml->sflist, IP6_SFLSIZE(iml->sflist->sl_max));
-		iml->sflist = NULL;
+		return ip6_mc_del_src(idev, &iml->addr, iml->sfmode, 0, NULL, 0);
 	}
-	write_unlock_bh(&iml->sflock);
+	err = ip6_mc_del_src(idev, &iml->addr, iml->sfmode,
+		iml->sflist->sl_count, iml->sflist->sl_addr, 0);
+	sock_kfree_s(sk, iml->sflist, IP6_SFLSIZE(iml->sflist->sl_max));
+	iml->sflist = NULL;
 	return err;
 }
 
@@ -2434,8 +2427,7 @@ static void mld_ifc_timer_expire(unsigned long data)
 	if (idev->mc_ifc_count) {
 		idev->mc_ifc_count--;
 		if (idev->mc_ifc_count)
-			mld_ifc_start_timer(idev,
-					    unsolicited_report_interval(idev));
+			mld_ifc_start_timer(idev, idev->mc_maxdelay);
 	}
 	in6_dev_put(idev);
 }

@@ -199,8 +199,6 @@ static int red_change(struct Qdisc *sch, struct nlattr *opt)
 	max_P = tb[TCA_RED_MAX_P] ? nla_get_u32(tb[TCA_RED_MAX_P]) : 0;
 
 	ctl = nla_data(tb[TCA_RED_PARMS]);
-	if (!red_check_params(ctl->qth_min, ctl->qth_max, ctl->Wlog))
-		return -EINVAL;
 
 	if (ctl->limit > 0) {
 		child = fifo_create_dflt(sch, &bfifo_qdisc_ops, ctl->limit);
@@ -212,8 +210,7 @@ static int red_change(struct Qdisc *sch, struct nlattr *opt)
 	q->flags = ctl->flags;
 	q->limit = ctl->limit;
 	if (child) {
-		qdisc_tree_reduce_backlog(q->qdisc, q->qdisc->q.qlen,
-					  q->qdisc->qstats.backlog);
+		qdisc_tree_decrease_qlen(q->qdisc, q->qdisc->q.qlen);
 		qdisc_destroy(q->qdisc);
 		q->qdisc = child;
 	}
@@ -316,7 +313,12 @@ static int red_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new,
 	if (new == NULL)
 		new = &noop_qdisc;
 
-	*old = qdisc_replace(sch, new, &q->qdisc);
+	sch_tree_lock(sch);
+	*old = q->qdisc;
+	q->qdisc = new;
+	qdisc_tree_decrease_qlen(*old, (*old)->q.qlen);
+	qdisc_reset(*old);
+	sch_tree_unlock(sch);
 	return 0;
 }
 

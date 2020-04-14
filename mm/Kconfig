@@ -556,7 +556,7 @@ config MEM_SOFT_DIRTY
 config ZSWAP
 	bool "Compressed cache for swap pages (EXPERIMENTAL)"
 	depends on FRONTSWAP && CRYPTO=y
-	select CRYPTO_LZ4
+	select CRYPTO_LZO
 	select ZPOOL
 	default n
 	help
@@ -653,5 +653,5 @@ config ZNDSWAP
 	  when we have 2 or more swap areas in the system.
 # modify by zhaofei for slub issue by FAQ18276
 config LCT_SLUB_DEBUG
-	bool "Enabel longcheer debug slub"
+	bool " Enabel longcheer debug slub "
 	default n

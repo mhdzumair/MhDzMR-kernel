@@ -41,9 +41,9 @@ struct service_handler {
 	unsigned int sysno;
 	void *param_buf;
 	unsigned size;
-	long (*init)(struct service_handler *handler);
+	long (*init)(struct service_handler *handler); 
 	void (*deinit)(struct service_handler *handler);
-	int (*handle)(struct service_handler *handler);
+	int (*handle)(struct service_handler *handler); 
 };
 
 struct switch_call_struct
@@ -181,7 +181,7 @@ static int check_work_type(int work_type)
 	case LOCK_PM_MUTEX:
 	case UNLOCK_PM_MUTEX:
 	case SWITCH_CORE:
-	case NT_DUMP_T:
+	case NT_DUMP_T:	
 		return 0;
 
 	default:
@@ -259,10 +259,10 @@ int handle_sched_call(void *buff)
 {
 	volatile unsigned long smc_type = 2;
 
-	nt_sched_t((uint32_t *)(&smc_type));
+	nt_sched_t((uint64_t *)(&smc_type));
 	while(smc_type == 0x54) {
 		//udelay(IRQ_DELAY);
-		nt_sched_t((uint32_t *)(&smc_type));
+		nt_sched_t((uint64_t *)(&smc_type));
 	}
 	return 0;
 }
@@ -391,11 +391,11 @@ int handle_switch_call(void *buff)
 
 	unsigned long smc_type = 2;
 
-	nt_sched_t((uint32_t *)(&smc_type));
+	nt_sched_t((uint64_t *)(&smc_type));
 
 	while (smc_type == 0x54) {
 		//udelay(IRQ_DELAY);
-		nt_sched_t((uint32_t *)(&smc_type));
+		nt_sched_t((uint64_t *)(&smc_type));
 	}
 	return 0;
 }
@@ -417,7 +417,7 @@ static void switch_fn(struct kthread_work *work)
 	switch (call_type) {
 	case LOAD_FUNC:
 		secondary_load_func();
-		break;
+		break;		
 	case BOOT_STAGE1:
 		secondary_boot_stage1((void *)(switch_ent->buff_addr));
 		break;
@@ -481,7 +481,7 @@ static void switch_fn(struct kthread_work *work)
 		if (retVal < 0) {
 			IMSG_ERROR("[%s][%d] fail to handle dump-Call!\n", __func__, __LINE__);
 		}
-		break;
+		break;		
 	default:
 		IMSG_ERROR("switch fn handles a undefined call!\n");
 		break;

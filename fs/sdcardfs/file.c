@@ -120,9 +120,9 @@ static long sdcardfs_unlocked_ioctl(struct file *file, unsigned int cmd,
 	/* XXX: use vfs_ioctl if/when VFS exports it */
 	if (!lower_file || !lower_file->f_op)
 		goto out;
+
 	if (lower_file->f_op->unlocked_ioctl)
 		err = lower_file->f_op->unlocked_ioctl(lower_file, cmd, arg);
-
 out:
 	return err;
 }
@@ -139,9 +139,9 @@ static long sdcardfs_compat_ioctl(struct file *file, unsigned int cmd,
 	/* XXX: use vfs_ioctl if/when VFS exports it */
 	if (!lower_file || !lower_file->f_op)
 		goto out;
+
 	if (lower_file->f_op->compat_ioctl)
 		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
-
 out:
 	return err;
 }
@@ -232,7 +232,11 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 	}
 
 	/* save current_cred and override it */
-	OVERRIDE_CRED(sbi, saved_cred);
+	saved_cred = override_fsids(sbi);
+	if (!saved_cred) {
+		err = -ENOMEM;
+		goto out_err;
+	}
 
 	if (sbi->flag && SDCARDFS_MOUNT_ACCESS_DISABLE) {
 		err = -ENOENT;
@@ -268,7 +272,7 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 	}
 
 out_revert_cred:
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 out_err:
 	dput(parent);
 	return err;
@@ -346,7 +350,9 @@ static loff_t sdcardfs_file_llseek(struct file *file, loff_t offset, int whence)
 	int err;
 	struct file *lower_file;
 	const struct cred *saved_cred;
-	OVERRIDE_CRED(SDCARDFS_SB(file->f_path.dentry->d_sb), saved_cred);
+	saved_cred = override_fsids(SDCARDFS_SB(file->f_path.dentry->d_sb));
+	if (!saved_cred)
+		return -ENOMEM;
 
 
 	err = generic_file_llseek(file, offset, whence);
@@ -357,7 +363,7 @@ static loff_t sdcardfs_file_llseek(struct file *file, loff_t offset, int whence)
 	err = generic_file_llseek(lower_file, offset, whence);
 
 out:
-	REVERT_CRED(saved_cred);
+	revert_fsids(saved_cred);
 	return err;
 }
 

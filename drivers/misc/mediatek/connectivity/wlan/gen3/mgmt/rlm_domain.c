@@ -740,10 +740,9 @@ P_DOMAIN_INFO_ENTRY rlmDomainGetDomainInfo(P_ADAPTER_T prAdapter)
 * \return none
 */
 /*----------------------------------------------------------------------------*/
-VOID
-rlmDomainGetChnlList(P_ADAPTER_T prAdapter,
-		     ENUM_BAND_T eSpecificBand, BOOLEAN fgNoDfs,
-		     UINT_8 ucMaxChannelNum, PUINT_8 pucNumOfChannel, P_RF_CHANNEL_INFO_T paucChannelList)
+VOID rlmDomainGetChnlList(P_ADAPTER_T prAdapter,
+			  ENUM_BAND_T eSpecificBand, BOOLEAN fgNoDfs,
+			  UINT_8 ucMaxChannelNum, PUINT_8 pucNumOfChannel, P_RF_CHANNEL_INFO_T paucChannelList)
 {
 	UINT_8 i, j, ucNum;
 	P_DOMAIN_SUBBAND_INFO prSubband;

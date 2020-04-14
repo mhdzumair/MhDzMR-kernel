@@ -229,7 +229,7 @@ int perf_cpu_time_max_percent_handler(struct ctl_table *table, int write,
 				void __user *buffer, size_t *lenp,
 				loff_t *ppos)
 {
-	int ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
+	int ret = proc_dointvec(table, write, buffer, lenp, ppos);
 
 	if (ret || !write)
 		return ret;
@@ -3934,14 +3934,7 @@ retry:
 		goto retry;
 	}
 
-	if (event->attr.freq) {
-		event->attr.sample_freq = value;
-	} else {
-		event->attr.sample_period = value;
-		event->hw.sample_period = value;
-	}
-
-	local64_set(&event->hw.period_left, 0);
+	__perf_event_period(&pe);
 	raw_spin_unlock_irq(&ctx->lock);
 
 	return 0;
@@ -4873,6 +4866,9 @@ static void perf_output_read_one(struct perf_output_handle *handle,
 	__output_copy(handle, values, n * sizeof(u64));
 }
 
+/*
+ * XXX PERF_FORMAT_GROUP vs inherited events seems difficult.
+ */
 static void perf_output_read_group(struct perf_output_handle *handle,
 			    struct perf_event *event,
 			    u64 enabled, u64 running)
@@ -4890,8 +4886,7 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 	if (read_format & PERF_FORMAT_TOTAL_TIME_RUNNING)
 		values[n++] = running;
 
-	if ((leader != event) &&
-	    (leader->state == PERF_EVENT_STATE_ACTIVE))
+	if (leader != event)
 		leader->pmu->read(leader);
 
 	values[n++] = perf_event_count(leader);
@@ -4918,13 +4913,6 @@ static void perf_output_read_group(struct perf_output_handle *handle,
 #define PERF_FORMAT_TOTAL_TIMES (PERF_FORMAT_TOTAL_TIME_ENABLED|\
 				 PERF_FORMAT_TOTAL_TIME_RUNNING)
 
-/*
- * XXX PERF_SAMPLE_READ vs inherited events seems difficult.
- *
- * The problem is that its both hard and excessively expensive to iterate the
- * child list, not to mention that its impossible to IPI the children running
- * on another CPU, from interrupt/NMI context.
- */
 static void perf_output_read(struct perf_output_handle *handle,
 			     struct perf_event *event)
 {
@@ -5538,7 +5526,6 @@ static void perf_event_mmap_output(struct perf_event *event,
 	struct perf_output_handle handle;
 	struct perf_sample_data sample;
 	int size = mmap_event->event_id.header.size;
-	u32 type = mmap_event->event_id.header.type;
 	int ret;
 
 	if (!perf_event_mmap_match(event, data))
@@ -5582,7 +5569,6 @@ static void perf_event_mmap_output(struct perf_event *event,
 	perf_output_end(&handle);
 out:
 	mmap_event->event_id.header.size = size;
-	mmap_event->event_id.header.type = type;
 }
 
 static void perf_event_mmap_event(struct perf_mmap_event *mmap_event)
@@ -6065,8 +6051,6 @@ end:
 	rcu_read_unlock();
 }
 
-DEFINE_PER_CPU(struct pt_regs, __perf_regs[4]);
-
 int perf_swevent_get_recursion_context(void)
 {
 	struct swevent_htable *swhash = this_cpu_ptr(&swevent_htable);
@@ -6082,30 +6066,21 @@ inline void perf_swevent_put_recursion_context(int rctx)
 	put_recursion_context(swhash->recursion, rctx);
 }
 
-void ___perf_sw_event(u32 event_id, u64 nr, struct pt_regs *regs, u64 addr)
-{
-	struct perf_sample_data data;
-
-	if (WARN_ON_ONCE(!regs))
-		return;
-
-	perf_sample_data_init(&data, addr, 0);
-	do_perf_sw_event(PERF_TYPE_SOFTWARE, event_id, nr, &data, regs);
-}
-
 void __perf_sw_event(u32 event_id, u64 nr, struct pt_regs *regs, u64 addr)
 {
+	struct perf_sample_data data;
 	int rctx;
 
 	preempt_disable_notrace();
 	rctx = perf_swevent_get_recursion_context();
-	if (unlikely(rctx < 0))
-		goto fail;
+	if (rctx < 0)
+		return;
 
-	___perf_sw_event(event_id, nr, regs, addr);
+	perf_sample_data_init(&data, addr, 0);
+
+	do_perf_sw_event(PERF_TYPE_SOFTWARE, event_id, nr, &data, regs);
 
 	perf_swevent_put_recursion_context(rctx);
-fail:
 	preempt_enable_notrace();
 }
 
@@ -6365,8 +6340,6 @@ void perf_tp_event(u64 addr, u64 count, void *record, int entry_size,
 			goto unlock;
 
 		list_for_each_entry_rcu(event, &ctx->event_list, event_entry) {
-			if (event->cpu != smp_processor_id())
-				continue;
 			if (event->attr.type != PERF_TYPE_TRACEPOINT)
 				continue;
 			if (event->attr.config != entry->type)
@@ -6958,6 +6931,7 @@ skip_type:
 		__perf_event_init_context(&cpuctx->ctx);
 		lockdep_set_class(&cpuctx->ctx.mutex, &cpuctx_mutex);
 		lockdep_set_class(&cpuctx->ctx.lock, &cpuctx_lock);
+		cpuctx->ctx.type = cpu_context;
 		cpuctx->ctx.pmu = pmu;
 
 		__perf_cpu_hrtimer_init(cpuctx, cpu);
@@ -7215,10 +7189,9 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	local64_set(&hwc->period_left, hwc->sample_period);
 
 	/*
-	 * We currently do not support PERF_SAMPLE_READ on inherited events.
-	 * See perf_output_read().
+	 * we currently do not support PERF_FORMAT_GROUP on inherited events
 	 */
-	if (attr->inherit && (attr->sample_type & PERF_SAMPLE_READ))
+	if (attr->inherit && (attr->read_format & PERF_FORMAT_GROUP))
 		goto err_ns;
 
 	pmu = perf_init_event(event);
@@ -7365,9 +7338,9 @@ static int perf_copy_attr(struct perf_event_attr __user *uattr,
 		 * __u16 sample size limit.
 		 */
 		if (attr->sample_stack_user >= USHRT_MAX)
-			return -EINVAL;
+			ret = -EINVAL;
 		else if (!IS_ALIGNED(attr->sample_stack_user, sizeof(u64)))
-			return -EINVAL;
+			ret = -EINVAL;
 	}
 
 out:
@@ -7639,27 +7612,16 @@ SYSCALL_DEFINE5(perf_event_open,
 		if (group_leader->group_leader != group_leader)
 			goto err_context;
 		/*
-		 * Make sure we're both events for the same CPU;
-		 * grouping events for different CPUs is broken; since
-		 * you can never concurrently schedule them anyhow.
+		 * Do not allow to attach to a group in a different
+		 * task or CPU context:
 		 */
-		if (group_leader->cpu != event->cpu)
-			goto err_context;
-
-		/*
-		 * Make sure we're both on the same task, or both
-		 * per-CPU events.
-		 */
-		if (group_leader->ctx->task != ctx->task)
-			goto err_context;
-
-		/*
-		 * Do not allow to attach to a group in a different task
-		 * or CPU context. If we're moving SW events, we'll fix
-		 * this up later, so allow that.
-		 */
-		if (!move_group && group_leader->ctx != ctx)
-			goto err_context;
+		if (move_group) {
+			if (group_leader->ctx->type != ctx->type)
+				goto err_context;
+		} else {
+			if (group_leader->ctx != ctx)
+				goto err_context;
+		}
 
 		/*
 		 * Only a group leader can be exclusive or pinned
@@ -8317,7 +8279,7 @@ static int perf_event_init_context(struct task_struct *child, int ctxn)
 		ret = inherit_task_group(event, parent, parent_ctx,
 					 child, ctxn, &inherited_all);
 		if (ret)
-			goto out_unlock;
+			break;
 	}
 
 	/*
@@ -8333,7 +8295,7 @@ static int perf_event_init_context(struct task_struct *child, int ctxn)
 		ret = inherit_task_group(event, parent, parent_ctx,
 					 child, ctxn, &inherited_all);
 		if (ret)
-			goto out_unlock;
+			break;
 	}
 
 	raw_spin_lock_irqsave(&parent_ctx->lock, flags);
@@ -8361,7 +8323,6 @@ static int perf_event_init_context(struct task_struct *child, int ctxn)
 	}
 
 	raw_spin_unlock_irqrestore(&parent_ctx->lock, flags);
-out_unlock:
 	mutex_unlock(&parent_ctx->mutex);
 
 	perf_unpin_context(parent_ctx);

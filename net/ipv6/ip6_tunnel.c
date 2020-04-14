@@ -273,12 +273,12 @@ static int ip6_tnl_create2(struct net_device *dev)
 
 	t = netdev_priv(dev);
 
-	dev->rtnl_link_ops = &ip6_link_ops;
 	err = register_netdevice(dev);
 	if (err < 0)
 		goto out;
 
 	strcpy(t->parms.name, dev->name);
+	dev->rtnl_link_ops = &ip6_link_ops;
 
 	dev_hold(dev);
 	ip6_tnl_link(ip6n, t);
@@ -307,13 +307,10 @@ static struct ip6_tnl *ip6_tnl_create(struct net *net, struct __ip6_tnl_parm *p)
 	char name[IFNAMSIZ];
 	int err;
 
-	if (p->name[0]) {
-		if (!dev_valid_name(p->name))
-			goto failed;
+	if (p->name[0])
 		strlcpy(name, p->name, IFNAMSIZ);
-	} else {
+	else
 		sprintf(name, "ip6tnl%%d");
-	}
 
 	dev = alloc_netdev(sizeof(*t), name, NET_NAME_UNKNOWN,
 			   ip6_tnl_dev_setup);
@@ -410,19 +407,18 @@ ip6_tnl_dev_uninit(struct net_device *dev)
 
 __u16 ip6_tnl_parse_tlv_enc_lim(struct sk_buff *skb, __u8 *raw)
 {
-	const struct ipv6hdr *ipv6h = (const struct ipv6hdr *)raw;
-	unsigned int nhoff = raw - skb->data;
-	unsigned int off = nhoff + sizeof(*ipv6h);
-	u8 next, nexthdr = ipv6h->nexthdr;
+	const struct ipv6hdr *ipv6h = (const struct ipv6hdr *) raw;
+	__u8 nexthdr = ipv6h->nexthdr;
+	__u16 off = sizeof(*ipv6h);
 
 	while (ipv6_ext_hdr(nexthdr) && nexthdr != NEXTHDR_NONE) {
+		__u16 optlen = 0;
 		struct ipv6_opt_hdr *hdr;
-		u16 optlen;
-
-		if (!pskb_may_pull(skb, off + sizeof(*hdr)))
+		if (raw + off + sizeof(*hdr) > skb->data &&
+		    !pskb_may_pull(skb, raw - skb->data + off + sizeof (*hdr)))
 			break;
 
-		hdr = (struct ipv6_opt_hdr *)(skb->data + off);
+		hdr = (struct ipv6_opt_hdr *) (raw + off);
 		if (nexthdr == NEXTHDR_FRAGMENT) {
 			struct frag_hdr *frag_hdr = (struct frag_hdr *) hdr;
 			if (frag_hdr->frag_off)
@@ -433,29 +429,20 @@ __u16 ip6_tnl_parse_tlv_enc_lim(struct sk_buff *skb, __u8 *raw)
 		} else {
 			optlen = ipv6_optlen(hdr);
 		}
-		/* cache hdr->nexthdr, since pskb_may_pull() might
-		 * invalidate hdr
-		 */
-		next = hdr->nexthdr;
 		if (nexthdr == NEXTHDR_DEST) {
-			u16 i = 2;
-
-			/* Remember : hdr is no longer valid at this point. */
-			if (!pskb_may_pull(skb, off + optlen))
-				break;
-
+			__u16 i = off + 2;
 			while (1) {
 				struct ipv6_tlv_tnl_enc_lim *tel;
 
 				/* No more room for encapsulation limit */
-				if (i + sizeof(*tel) > optlen)
+				if (i + sizeof (*tel) > off + optlen)
 					break;
 
-				tel = (struct ipv6_tlv_tnl_enc_lim *)(skb->data + off + i);
+				tel = (struct ipv6_tlv_tnl_enc_lim *) &raw[i];
 				/* return index of option if found and valid */
 				if (tel->type == IPV6_TLV_TNL_ENCAP_LIMIT &&
 				    tel->length == 1)
-					return i + off - nhoff;
+					return i;
 				/* else jump to next option */
 				if (tel->type)
 					i += tel->length + 2;
@@ -463,7 +450,7 @@ __u16 ip6_tnl_parse_tlv_enc_lim(struct sk_buff *skb, __u8 *raw)
 					i++;
 			}
 		}
-		nexthdr = next;
+		nexthdr = hdr->nexthdr;
 		off += optlen;
 	}
 	return 0;
@@ -638,7 +625,7 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 					   IPPROTO_IPIP,
 					   RT_TOS(eiph->tos), 0);
 		if (IS_ERR(rt) ||
-		    rt->dst.dev->type != ARPHRD_TUNNEL6) {
+		    rt->dst.dev->type != ARPHRD_TUNNEL) {
 			if (!IS_ERR(rt))
 				ip_rt_put(rt);
 			goto out;
@@ -648,7 +635,7 @@ ip4ip6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 		ip_rt_put(rt);
 		if (ip_route_input(skb2, eiph->daddr, eiph->saddr, eiph->tos,
 				   skb2->dev) ||
-		    skb_dst(skb2)->dev->type != ARPHRD_TUNNEL6)
+		    skb_dst(skb2)->dev->type != ARPHRD_TUNNEL)
 			goto out;
 	}
 
@@ -1083,18 +1070,12 @@ static inline int
 ip4ip6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	const struct iphdr  *iph;
+	const struct iphdr  *iph = ip_hdr(skb);
 	int encap_limit = -1;
 	struct flowi6 fl6;
 	__u8 dsfield;
 	__u32 mtu;
 	int err;
-
-	/* ensure we can access the full inner ip header */
-	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
-		return -1;
-
-	iph = ip_hdr(skb);
 
 	if ((t->parms.proto != IPPROTO_IPIP && t->parms.proto != 0) ||
 	    !ip6_tnl_xmit_ctl(t))
@@ -1130,7 +1111,7 @@ static inline int
 ip6ip6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct ip6_tnl *t = netdev_priv(dev);
-	struct ipv6hdr *ipv6h;
+	struct ipv6hdr *ipv6h = ipv6_hdr(skb);
 	int encap_limit = -1;
 	__u16 offset;
 	struct flowi6 fl6;
@@ -1138,10 +1119,6 @@ ip6ip6_tnl_xmit(struct sk_buff *skb, struct net_device *dev)
 	__u32 mtu;
 	int err;
 
-	if (unlikely(!pskb_may_pull(skb, sizeof(*ipv6h))))
-		return -1;
-
-	ipv6h = ipv6_hdr(skb);
 	if ((t->parms.proto != IPPROTO_IPV6 && t->parms.proto != 0) ||
 	    !ip6_tnl_xmit_ctl(t) || ip6_tnl_addr_conflict(t, ipv6h))
 		return -1;

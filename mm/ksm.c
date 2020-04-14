@@ -288,8 +288,7 @@ static inline struct rmap_item *alloc_rmap_item(void)
 {
 	struct rmap_item *rmap_item;
 
-	rmap_item = kmem_cache_zalloc(rmap_item_cache, GFP_KERNEL |
-						__GFP_NORETRY | __GFP_NOWARN);
+	rmap_item = kmem_cache_zalloc(rmap_item_cache, GFP_KERNEL);
 	if (rmap_item)
 		ksm_rmap_items++;
 	return rmap_item;
@@ -1821,7 +1820,7 @@ static int ksm_fb_notifier_callback(struct notifier_block *p,
 
 static struct notifier_block ksm_fb_notifier = {
 	.notifier_call = ksm_fb_notifier_callback,
-};
+}
 #endif
 #else /* no KSM_KCTL_INTERFACE*/
 static ssize_t ksm_run_change(unsigned long flags)

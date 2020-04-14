@@ -542,8 +542,7 @@ relookup_failed:
  *			MUST reply to only the first fragment.
  */
 
-void __icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info,
-		 const struct ip_options *opt)
+void icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info)
 {
 	struct iphdr *iph;
 	int room;
@@ -657,7 +656,7 @@ void __icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info,
 					  iph->tos;
 	mark = IP4_REPLY_MARK(net, skb_in->mark);
 
-	if (__ip_options_echo(&icmp_param->replyopts.opt.opt, skb_in, opt))
+	if (ip_options_echo(&icmp_param->replyopts.opt.opt, skb_in))
 		goto out_unlock;
 
 
@@ -709,7 +708,7 @@ out_free:
 	kfree(icmp_param);
 out:;
 }
-EXPORT_SYMBOL(__icmp_send);
+EXPORT_SYMBOL(icmp_send);
 
 
 static void icmp_socket_deliver(struct sk_buff *skb, u32 info)
@@ -904,6 +903,7 @@ static void icmp_echo(struct sk_buff *skb)
  */
 static void icmp_timestamp(struct sk_buff *skb)
 {
+	struct timespec tv;
 	struct icmp_bxm icmp_param;
 	/*
 	 *	Too short.
@@ -914,7 +914,9 @@ static void icmp_timestamp(struct sk_buff *skb)
 	/*
 	 *	Fill in the current time as ms since midnight UT:
 	 */
-	icmp_param.data.times[1] = inet_current_timestamp();
+	getnstimeofday(&tv);
+	icmp_param.data.times[1] = htonl((tv.tv_sec % 86400) * MSEC_PER_SEC +
+					 tv.tv_nsec / NSEC_PER_MSEC);
 	icmp_param.data.times[2] = icmp_param.data.times[1];
 	if (skb_copy_bits(skb, 0, &icmp_param.data.times[0], 4))
 		BUG();

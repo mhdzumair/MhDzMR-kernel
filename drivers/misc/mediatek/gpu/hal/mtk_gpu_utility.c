@@ -634,3 +634,4 @@ bool mtk_get_vsync_offset_debug_status(unsigned int* pui32DebugStatus)
     return false;
 }
 EXPORT_SYMBOL(mtk_get_vsync_offset_debug_status);
+

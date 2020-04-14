@@ -985,7 +985,7 @@ static bool vxlan_snoop(struct net_device *dev,
 			return false;
 
 		/* Don't migrate static entries, drop packets */
-		if (f->state & (NUD_PERMANENT | NUD_NOARP))
+		if (f->state & NUD_NOARP)
 			return true;
 
 		if (net_ratelimit())
@@ -1238,14 +1238,6 @@ static void vxlan_rcv(struct vxlan_sock *vs,
 		}
 	}
 
-	rcu_read_lock();
-
-	if (unlikely(!(vxlan->dev->flags & IFF_UP))) {
-		rcu_read_unlock();
-		atomic_long_inc(&vxlan->dev->rx_dropped);
-		goto drop;
-	}
-
 	stats = this_cpu_ptr(vxlan->dev->tstats);
 	u64_stats_update_begin(&stats->syncp);
 	stats->rx_packets++;
@@ -1253,8 +1245,6 @@ static void vxlan_rcv(struct vxlan_sock *vs,
 	u64_stats_update_end(&stats->syncp);
 
 	netif_rx(skb);
-
-	rcu_read_unlock();
 
 	return;
 drop:
@@ -1675,7 +1665,7 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 	struct pcpu_sw_netstats *tx_stats, *rx_stats;
 	union vxlan_addr loopback;
 	union vxlan_addr *remote_ip = &dst_vxlan->default_dst.remote_ip;
-	struct net_device *dev;
+	struct net_device *dev = skb->dev;
 	int len = skb->len;
 
 	tx_stats = this_cpu_ptr(src_vxlan->dev->tstats);
@@ -1695,15 +1685,8 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 #endif
 	}
 
-	rcu_read_lock();
-	dev = skb->dev;
-	if (unlikely(!(dev->flags & IFF_UP))) {
-		kfree_skb(skb);
-		goto drop;
-	}
-
 	if (dst_vxlan->flags & VXLAN_F_LEARN)
-		vxlan_snoop(dev, &loopback, eth_hdr(skb)->h_source);
+		vxlan_snoop(skb->dev, &loopback, eth_hdr(skb)->h_source);
 
 	u64_stats_update_begin(&tx_stats->syncp);
 	tx_stats->tx_packets++;
@@ -1716,10 +1699,8 @@ static void vxlan_encap_bypass(struct sk_buff *skb, struct vxlan_dev *src_vxlan,
 		rx_stats->rx_bytes += len;
 		u64_stats_update_end(&rx_stats->syncp);
 	} else {
-drop:
 		dev->stats.rx_dropped++;
 	}
-	rcu_read_unlock();
 }
 
 static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
@@ -2279,7 +2260,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[])
 
 	if (data[IFLA_VXLAN_ID]) {
 		__u32 id = nla_get_u32(data[IFLA_VXLAN_ID]);
-		if (id >= VXLAN_N_VID)
+		if (id >= VXLAN_VID_MASK)
 			return -ERANGE;
 	}
 

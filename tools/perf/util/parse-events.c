@@ -1319,7 +1319,7 @@ static void print_symbol_events(const char *event_glob, unsigned type,
 		if (strlen(syms->alias))
 			snprintf(name, MAX_NAME_LEN, "%s OR %s", syms->symbol, syms->alias);
 		else
-			strlcpy(name, syms->symbol, MAX_NAME_LEN);
+			strncpy(name, syms->symbol, MAX_NAME_LEN);
 
 		printf("  %-50s [%s]\n", name, event_type_descriptors[type]);
 

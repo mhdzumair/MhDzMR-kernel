@@ -29,14 +29,9 @@ static inline struct tcphdr *tcp_hdr(const struct sk_buff *skb)
 	return (struct tcphdr *)skb_transport_header(skb);
 }
 
-static inline unsigned int __tcp_hdrlen(const struct tcphdr *th)
-{
-	return th->doff * 4;
-}
-
 static inline unsigned int tcp_hdrlen(const struct sk_buff *skb)
 {
-	return __tcp_hdrlen(tcp_hdr(skb));
+	return tcp_hdr(skb)->doff * 4;
 }
 
 static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
@@ -292,7 +287,7 @@ struct tcp_sock {
 
 /* Receiver queue space */
 	struct {
-		u32	space;
+		int	space;
 		u32	seq;
 		u32	time;
 	} rcvq_space;

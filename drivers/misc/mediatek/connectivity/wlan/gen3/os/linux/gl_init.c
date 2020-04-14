@@ -1251,7 +1251,7 @@ VOID wlanUpdateChannelTable(P_GLUE_INFO_T prGlueInfo)
 
 	/* 2. Get current domain channel list */
 	rlmDomainGetChnlList(prGlueInfo->prAdapter,
-			     BAND_NULL, false,
+			     BAND_NULL, FALSE,
 			     ARRAY_SIZE(mtk_2ghz_channels) + ARRAY_SIZE(mtk_5ghz_channels),
 			     &ucNumOfChannel, aucChannelList);
 
@@ -1922,18 +1922,10 @@ static INT_32 wlanProbe(PVOID pvData)
 			kalMemZero(pucConfigBuf, WLAN_CFG_FILE_BUF_SIZE);
 			if (pucConfigBuf) {
 				if (kalReadToFile("/storage/sdcard0/wifi.cfg", pucConfigBuf,
-						  WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen) == 0) {
-					/* ToDo:: Nothing */
-				} else if (kalReadToFile("/data/misc/wifi.cfg", pucConfigBuf,
-							 WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen) == 0) {
-					/* ToDo:: Nothing */
-				} else if (kalReadToFile("/data/misc/wifi/wifi.cfg", pucConfigBuf,
-							 WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen) == 0) {
-					/* ToDo:: Nothing */
-				} else if (kalReadToFile("/vendor/firmware/wifi.cfg", pucConfigBuf,
-							 WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen) == 0) {
-					/* ToDo:: Nothing */
-				}
+						  WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen) == 0);
+				else
+					kalReadToFile("/data/misc/wifi/wifi.cfg", pucConfigBuf,
+							 WLAN_CFG_FILE_BUF_SIZE, &u4ConfigReadLen);
 
 				if (pucConfigBuf[0] != '\0' && u4ConfigReadLen > 0)
 					wlanCfgInit(prAdapter, pucConfigBuf, u4ConfigReadLen, 0);

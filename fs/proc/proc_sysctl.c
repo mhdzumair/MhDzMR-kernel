@@ -617,10 +617,7 @@ static bool proc_sys_link_fill_cache(struct file *file,
 				    struct ctl_table *table)
 {
 	bool ret = true;
-
 	head = sysctl_head_grab(head);
-	if (IS_ERR(head))
-		return false;
 
 	if (S_ISLNK(table->mode)) {
 		/* It is not an error if we can not follow the link ignore it */
@@ -1512,11 +1509,8 @@ static void drop_sysctl_table(struct ctl_table_header *header)
 	if (--header->nreg)
 		return;
 
-	if (parent) {
-		put_links(header);
-		start_unregistering(header);
-	}
-
+	put_links(header);
+	start_unregistering(header);
 	if (!--header->count)
 		kfree_rcu(header, rcu);
 

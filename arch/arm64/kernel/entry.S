@@ -28,7 +28,6 @@
 #include <asm/errno.h>
 #include <asm/esr.h>
 #include <asm/thread_info.h>
-#include <asm/asm-uaccess.h>
 #include <asm/unistd.h>
 
 /*
@@ -340,7 +339,7 @@ END(vectors)
  * Invalid mode handlers
  */
 	.macro	inv_entry, el, reason, regsize = 64
-	kernel_entry \el, \regsize
+	kernel_entry el, \regsize
 	mov	x0, sp
 	mov	x1, #\reason
 	mrs	x2, esr_el1
@@ -433,13 +432,12 @@ el1_da:
 	/*
 	 * Data abort handling
 	 */
-	mrs	x3, far_el1
+	mrs	x0, far_el1
 	enable_dbg
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq
 1:
-	clear_address_tag x0, x3
 	mov	x2, sp				// struct pt_regs
 	bl	do_mem_abort
 	mov	x5, sp
@@ -624,7 +622,7 @@ el0_da:
 	// enable interrupts before calling the main handler
 	enable_dbg_and_irq
 	ct_user_exit
-	clear_address_tag x0, x26
+	bic	x0, x26, #(0xff << 56)
 	mov	x1, x25
 	mov	x2, sp
 	bl	do_mem_abort
@@ -787,9 +785,6 @@ work_pending:
 	bl	do_notify_resume
 	b	ret_to_user
 work_resched:
-#ifdef CONFIG_TRACE_IRQFLAGS
-	bl	trace_hardirqs_off		// the IRQs are off here, inform the tracing code
-#endif
 	bl	schedule
 
 /*

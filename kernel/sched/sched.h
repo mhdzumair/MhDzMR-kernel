@@ -102,6 +102,11 @@ static inline int task_has_dl_policy(struct task_struct *p)
 	return dl_policy(p->policy);
 }
 
+static inline bool dl_time_before(u64 a, u64 b)
+{
+	return (s64)(a - b) < 0;
+}
+
 /*
  * Tells if entity @a should preempt entity @b.
  */
@@ -197,8 +202,6 @@ struct cfs_bandwidth {
 	/* statistics */
 	int nr_periods, nr_throttled;
 	u64 throttled_time;
-
-	bool distribute_running;
 #endif
 };
 

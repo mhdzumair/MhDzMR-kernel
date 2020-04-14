@@ -122,11 +122,11 @@ int __send_gatekeeper_command(unsigned long share_memory_size)
 
 	fp_call_flag = GLSCH_HIGH;
 
-	n_invoke_t_drv((uint32_t *)(&smc_type), 0, 0);
+	n_invoke_t_drv((uint64_t *)(&smc_type), 0, 0);
 
 	while(smc_type == 0x54) {
 		//udelay(IRQ_DELAY);
-		nt_sched_t((uint32_t *)(&smc_type));
+		nt_sched_t((uint64_t *)(&smc_type));
 	}
 
         return 0;
@@ -144,7 +144,7 @@ int send_gatekeeper_command(unsigned long share_memory_size)
         down(&fdrv_lock);
         ut_pm_mutex_lock(&pm_mutex);
 	IMSG_DEBUG("send_gatekeeper_command start\n");
-
+        
         if (teei_config_flag == 1) {
                 complete(&global_down_lock);
         }

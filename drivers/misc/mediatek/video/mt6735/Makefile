@@ -14,8 +14,6 @@
 # drivers/video/mtk/Makefile
 #
 
-obj-$(CONFIG_MTK_KCAL_CTRL) += mtk_kcal_ctrl.o
-
 obj-$(CONFIG_MTK_FB) += mtkfb_console.o        \
 			    disp_assert_layer.o    \
 			    primary_display.o      \

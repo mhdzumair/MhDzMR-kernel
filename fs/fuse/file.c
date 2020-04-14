@@ -56,7 +56,7 @@ struct fuse_file *fuse_file_alloc(struct fuse_conn *fc)
 {
 	struct fuse_file *ff;
 
-	ff = kzalloc(sizeof(struct fuse_file), GFP_KERNEL);
+	ff = kmalloc(sizeof(struct fuse_file), GFP_KERNEL);
 	if (unlikely(!ff))
 		return NULL;
 
@@ -456,15 +456,6 @@ static int fuse_flush(struct file *file, fl_owner_t id)
 	fuse_sync_writes(inode);
 	mutex_unlock(&inode->i_mutex);
 
-	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
-	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
-		err = -ENOSPC;
-	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
-	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
-		err = -EIO;
-	if (err)
-		return err;
-
 	req = fuse_get_req_nofail_nopages(fc, file);
 	memset(&inarg, 0, sizeof(inarg));
 	inarg.fh = ff->fh;
@@ -510,21 +501,6 @@ int fuse_fsync_common(struct file *file, loff_t start, loff_t end,
 		goto out;
 
 	fuse_sync_writes(inode);
-
-	/*
-	 * Due to implementation of fuse writeback
-	 * filemap_write_and_wait_range() does not catch errors.
-	 * We have to do this directly after fuse_sync_writes()
-	 */
-	if (test_bit(AS_ENOSPC, &file->f_mapping->flags) &&
-	    test_and_clear_bit(AS_ENOSPC, &file->f_mapping->flags))
-		err = -ENOSPC;
-	if (test_bit(AS_EIO, &file->f_mapping->flags) &&
-	    test_and_clear_bit(AS_EIO, &file->f_mapping->flags))
-		err = -EIO;
-	if (err)
-		goto out;
-
 	err = sync_inode_metadata(inode, 1);
 	if (err)
 		goto out;
@@ -912,7 +888,6 @@ static int fuse_readpages_fill(void *_data, struct page *page)
 	}
 
 	if (WARN_ON(req->num_pages >= req->max_pages)) {
-		unlock_page(page);
 		fuse_put_request(fc, req);
 		return -EIO;
 	}
@@ -1846,7 +1821,7 @@ static bool fuse_writepage_in_flight(struct fuse_req *new_req,
 		spin_unlock(&fc->lock);
 
 		dec_bdi_stat(bdi, BDI_WRITEBACK);
-		dec_zone_page_state(new_req->pages[0], NR_WRITEBACK_TEMP);
+		dec_zone_page_state(page, NR_WRITEBACK_TEMP);
 		bdi_writeout_inc(bdi);
 		fuse_writepage_free(fc, new_req);
 		fuse_request_free(new_req);
@@ -2882,7 +2857,7 @@ static void fuse_do_truncate(struct file *file)
 	attr.ia_file = file;
 	attr.ia_valid |= ATTR_FILE;
 
-	fuse_do_setattr(file->f_path.dentry, &attr, file);
+	fuse_do_setattr(inode, &attr, file);
 }
 
 static inline loff_t fuse_round_up(loff_t off)

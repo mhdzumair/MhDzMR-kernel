@@ -43,7 +43,21 @@ int ged_bridge_log_buf_write(
 		GED_BRIDGE_OUT_LOGBUFWRITE *psLogBufWriteOUT)
 {
 	psLogBufWriteOUT->eError = 
-		ged_log_buf_print2(psLogBufWriteIN->hLogBuf, psLogBufWriteIN->attrs, "%s", psLogBufWriteIN->acLogBuf);
+		ged_log_buf_print2(psLogBufWriteIN->hLogBuf, psLogBufWriteIN->attrs, psLogBufWriteIN->acLogBuf);
+
+#if 0
+	if (ged_log_buf_write(
+				psLogBufWriteIN->hLogBuf, 
+				/*from user*/psLogBufWriteIN->acLogBuf,
+				GED_BRIDGE_IN_LOGBUF_SIZE) > 0)
+	{
+		psLogBufWriteOUT->eError = GED_OK;
+	}
+	else
+	{
+		psLogBufWriteOUT->eError = GED_ERROR_FAIL;
+	}
+#endif
 	return 0;
 }
 //-----------------------------------------------------------------------------
@@ -144,7 +158,7 @@ int ged_bridge_event_notify(
 
 //-----------------------------------------------------------------------------
 #ifdef ENABLE_FRR_FOR_MT6XXX_PLATFORM
-int ged_bridge_vsync_wait(void *IN, void *OUT)
+int ged_bridge_vsync_wait(void)
 {
     ged_vsync_wait();
     return 0;

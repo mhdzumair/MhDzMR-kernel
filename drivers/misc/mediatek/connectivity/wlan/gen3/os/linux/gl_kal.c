@@ -105,6 +105,16 @@ static mm_segment_t orgfs;
 static PUINT_8 apucFwPath[] = {
 	(PUINT_8) "/storage/sdcard0/",
 	(PUINT_8) "/vendor/firmware/",
+#if !CONFIG_ANDROID
+	(PUINT_8) "/lib/firmware/",
+#endif
+	NULL
+};
+
+#if defined(MT6797)
+
+static PUINT_8 apucFwName[] = {
+	(PUINT_8) CFG_FW_FILENAME "_6797",
 	NULL
 };
 
@@ -3654,7 +3664,8 @@ kalGetChannelList(IN P_GLUE_INFO_T prGlueInfo,
 		  IN ENUM_BAND_T eSpecificBand,
 		  IN UINT_8 ucMaxChannelNum, IN PUINT_8 pucNumOfChannel, IN P_RF_CHANNEL_INFO_T paucChannelList)
 {
-	rlmDomainGetChnlList(prGlueInfo->prAdapter, eSpecificBand, false, ucMaxChannelNum, pucNumOfChannel, paucChannelList);
+	rlmDomainGetChnlList(prGlueInfo->prAdapter, eSpecificBand, FALSE, ucMaxChannelNum,
+			     pucNumOfChannel, paucChannelList);
 }
 
 /*----------------------------------------------------------------------------*/

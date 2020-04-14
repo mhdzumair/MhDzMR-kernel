@@ -297,9 +297,8 @@ qcaspi_receive(struct qcaspi *qca)
 
 	/* Allocate rx SKB if we don't have one available. */
 	if (!qca->rx_skb) {
-		qca->rx_skb = netdev_alloc_skb_ip_align(net_dev,
-							net_dev->mtu +
-							VLAN_ETH_HLEN);
+		qca->rx_skb = netdev_alloc_skb(net_dev,
+					       net_dev->mtu + VLAN_ETH_HLEN);
 		if (!qca->rx_skb) {
 			netdev_dbg(net_dev, "out of RX resources\n");
 			qca->stats.out_of_mem++;
@@ -379,7 +378,7 @@ qcaspi_receive(struct qcaspi *qca)
 					qca->rx_skb, qca->rx_skb->dev);
 				qca->rx_skb->ip_summed = CHECKSUM_UNNECESSARY;
 				netif_rx_ni(qca->rx_skb);
-				qca->rx_skb = netdev_alloc_skb_ip_align(net_dev,
+				qca->rx_skb = netdev_alloc_skb(net_dev,
 					net_dev->mtu + VLAN_ETH_HLEN);
 				if (!qca->rx_skb) {
 					netdev_dbg(net_dev, "out of RX resources\n");
@@ -636,7 +635,7 @@ qcaspi_netdev_open(struct net_device *dev)
 		return ret;
 	}
 
-	/* SPI thread takes care of TX queue */
+	netif_start_queue(qca->net_dev);
 
 	return 0;
 }
@@ -740,9 +739,6 @@ qcaspi_netdev_tx_timeout(struct net_device *dev)
 	qca->net_dev->stats.tx_errors++;
 	/* Trigger tx queue flush and QCA7000 reset */
 	qca->sync = QCASPI_SYNC_UNKNOWN;
-
-	if (qca->spi_thread)
-		wake_up_process(qca->spi_thread);
 }
 
 static int
@@ -764,8 +760,7 @@ qcaspi_netdev_init(struct net_device *dev)
 	if (!qca->rx_buffer)
 		return -ENOBUFS;
 
-	qca->rx_skb = netdev_alloc_skb_ip_align(dev, qca->net_dev->mtu +
-						VLAN_ETH_HLEN);
+	qca->rx_skb = netdev_alloc_skb(dev, qca->net_dev->mtu + VLAN_ETH_HLEN);
 	if (!qca->rx_skb) {
 		kfree(qca->rx_buffer);
 		netdev_info(qca->net_dev, "Failed to allocate RX sk_buff.\n");
@@ -817,7 +812,7 @@ qcaspi_netdev_setup(struct net_device *dev)
 	dev->netdev_ops = &qcaspi_netdev_ops;
 	qcaspi_set_ethtool_ops(dev);
 	dev->watchdog_timeo = QCASPI_TX_TIMEOUT;
-	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
+	dev->flags = IFF_MULTICAST;
 	dev->tx_queue_len = 100;
 
 	qca = netdev_priv(dev);

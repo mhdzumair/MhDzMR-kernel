@@ -315,9 +315,7 @@ static struct snd_pcm_chmap_elem *convert_chmap(int channels, unsigned int bits,
 /*
  * add this endpoint to the chip instance.
  * if a stream with the same endpoint already exists, append to it.
- * if not, create a new pcm stream. note, fp is added to the substream
- * fmt_list and will be freed on the chip instance release. do not free
- * fp or do remove it from the substream fmt_list to avoid double-free.
+ * if not, create a new pcm stream.
  */
 int snd_usb_add_audio_stream(struct snd_usb_audio *chip,
 			     int stream,

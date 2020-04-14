@@ -21,7 +21,6 @@
 #include <linux/slab.h>
 #include <linux/netdevice.h>
 #include <linux/if_arp.h>
-#include <linux/workqueue.h>
 #include <linux/can.h>
 #include <linux/can/dev.h>
 #include <linux/can/skb.h>
@@ -343,33 +342,6 @@ void can_put_echo_skb(struct sk_buff *skb, struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(can_put_echo_skb);
 
-struct sk_buff *__can_get_echo_skb(struct net_device *dev, unsigned int idx, u8 *len_ptr)
-{
-	struct can_priv *priv = netdev_priv(dev);
-
-	if (idx >= priv->echo_skb_max) {
-		netdev_err(dev, "%s: BUG! Trying to access can_priv::echo_skb out of bounds (%u/max %u)\n",
-			   __func__, idx, priv->echo_skb_max);
-		return NULL;
-	}
-
-	if (priv->echo_skb[idx]) {
-		/* Using "struct canfd_frame::len" for the frame
-		 * length is supported on both CAN and CANFD frames.
-		 */
-		struct sk_buff *skb = priv->echo_skb[idx];
-		struct canfd_frame *cf = (struct canfd_frame *)skb->data;
-		u8 len = cf->len;
-
-		*len_ptr = len;
-		priv->echo_skb[idx] = NULL;
-
-		return skb;
-	}
-
-	return NULL;
-}
-
 /*
  * Get the skb from the stack and loop it back locally
  *
@@ -379,16 +351,22 @@ struct sk_buff *__can_get_echo_skb(struct net_device *dev, unsigned int idx, u8 
  */
 unsigned int can_get_echo_skb(struct net_device *dev, unsigned int idx)
 {
-	struct sk_buff *skb;
-	u8 len;
+	struct can_priv *priv = netdev_priv(dev);
 
-	skb = __can_get_echo_skb(dev, idx, &len);
-	if (!skb)
-		return 0;
+	BUG_ON(idx >= priv->echo_skb_max);
 
-	netif_rx(skb);
+	if (priv->echo_skb[idx]) {
+		struct sk_buff *skb = priv->echo_skb[idx];
+		struct can_frame *cf = (struct can_frame *)skb->data;
+		u8 dlc = cf->can_dlc;
 
-	return len;
+		netif_rx(priv->echo_skb[idx]);
+		priv->echo_skb[idx] = NULL;
+
+		return dlc;
+	}
+
+	return 0;
 }
 EXPORT_SYMBOL_GPL(can_get_echo_skb);
 
@@ -413,8 +391,9 @@ EXPORT_SYMBOL_GPL(can_free_echo_skb);
 /*
  * CAN device restart for bus-off recovery
  */
-static void can_restart(struct net_device *dev)
+static void can_restart(unsigned long data)
 {
+	struct net_device *dev = (struct net_device *)data;
 	struct can_priv *priv = netdev_priv(dev);
 	struct net_device_stats *stats = &dev->stats;
 	struct sk_buff *skb;
@@ -454,14 +433,6 @@ restart:
 		netdev_err(dev, "Error %d during restart", err);
 }
 
-static void can_restart_work(struct work_struct *work)
-{
-	struct delayed_work *dwork = to_delayed_work(work);
-	struct can_priv *priv = container_of(dwork, struct can_priv, restart_work);
-
-	can_restart(priv->dev);
-}
-
 int can_restart_now(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
@@ -475,8 +446,8 @@ int can_restart_now(struct net_device *dev)
 	if (priv->state != CAN_STATE_BUS_OFF)
 		return -EBUSY;
 
-	cancel_delayed_work_sync(&priv->restart_work);
-	can_restart(dev);
+	/* Runs as soon as possible in the timer context */
+	mod_timer(&priv->restart_timer, jiffies);
 
 	return 0;
 }
@@ -492,14 +463,14 @@ void can_bus_off(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
 
-	netdev_info(dev, "bus-off\n");
+	netdev_dbg(dev, "bus-off\n");
 
 	netif_carrier_off(dev);
 	priv->can_stats.bus_off++;
 
 	if (priv->restart_ms)
-		schedule_delayed_work(&priv->restart_work,
-				      msecs_to_jiffies(priv->restart_ms));
+		mod_timer(&priv->restart_timer,
+			  jiffies + (priv->restart_ms * HZ) / 1000);
 }
 EXPORT_SYMBOL_GPL(can_bus_off);
 
@@ -606,7 +577,6 @@ struct net_device *alloc_candev(int sizeof_priv, unsigned int echo_skb_max)
 		return NULL;
 
 	priv = netdev_priv(dev);
-	priv->dev = dev;
 
 	if (echo_skb_max) {
 		priv->echo_skb_max = echo_skb_max;
@@ -616,7 +586,7 @@ struct net_device *alloc_candev(int sizeof_priv, unsigned int echo_skb_max)
 
 	priv->state = CAN_STATE_STOPPED;
 
-	INIT_DELAYED_WORK(&priv->restart_work, can_restart_work);
+	init_timer(&priv->restart_timer);
 
 	return dev;
 }
@@ -697,6 +667,8 @@ int open_candev(struct net_device *dev)
 	if (!netif_carrier_ok(dev))
 		netif_carrier_on(dev);
 
+	setup_timer(&priv->restart_timer, can_restart, (unsigned long)dev);
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(open_candev);
@@ -711,7 +683,7 @@ void close_candev(struct net_device *dev)
 {
 	struct can_priv *priv = netdev_priv(dev);
 
-	cancel_delayed_work_sync(&priv->restart_work);
+	del_timer_sync(&priv->restart_timer);
 	can_flush_echo_skb(dev);
 }
 EXPORT_SYMBOL_GPL(close_candev);
@@ -744,9 +716,6 @@ static int can_validate(struct nlattr *tb[], struct nlattr *data[])
 	 * - data bittiming
 	 * - control mode with CAN_CTRLMODE_FD set
 	 */
-
-	if (!data)
-		return 0;
 
 	if (data[IFLA_CAN_CTRLMODE]) {
 		struct can_ctrlmode *cm = nla_data(data[IFLA_CAN_CTRLMODE]);
@@ -958,11 +927,6 @@ static int can_newlink(struct net *src_net, struct net_device *dev,
 	return -EOPNOTSUPP;
 }
 
-static void can_dellink(struct net_device *dev, struct list_head *head)
-{
-	return;
-}
-
 static struct rtnl_link_ops can_link_ops __read_mostly = {
 	.kind		= "can",
 	.maxtype	= IFLA_CAN_MAX,
@@ -971,7 +935,6 @@ static struct rtnl_link_ops can_link_ops __read_mostly = {
 	.validate	= can_validate,
 	.newlink	= can_newlink,
 	.changelink	= can_changelink,
-	.dellink	= can_dellink,
 	.get_size	= can_get_size,
 	.fill_info	= can_fill_info,
 	.get_xstats_size = can_get_xstats_size,

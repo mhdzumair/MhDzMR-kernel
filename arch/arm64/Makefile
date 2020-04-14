@@ -10,7 +10,10 @@
 #
 # Copyright (C) 1995-2001 by Russell King
 
-LDFLAGS_vmlinux	:=--no-undefined -X
+LDFLAGS_vmlinux	:=-p --no-undefined -X
+ifeq ($(CONFIG_ARM64_ERRATUM_843419),y)
+LDFLAGS_vmlinux += --fix-cortex-a53-843419
+endif
 CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET=$(TEXT_OFFSET)
 OBJCOPYFLAGS	:=-O binary -R .note -R .note.gnu.build-id -R .comment -S
 GZFLAGS		:=-9

@@ -1229,7 +1229,7 @@ static int dwc3_gadget_ep_dequeue(struct usb_ep *ep,
 			dwc3_stop_active_transfer(dwc, dep->number, true);
 			goto out1;
 		}
-		dev_err(dwc->dev, "request %pK was not queued to %s\n",
+		dev_err(dwc->dev, "request %p was not queued to %s\n",
 				request, ep->name);
 		ret = -EINVAL;
 		goto out0;
@@ -1641,7 +1641,6 @@ static int dwc3_gadget_start(struct usb_gadget *g,
 
 	/* begin to receive SETUP packets */
 	dwc->ep0state = EP0_SETUP_PHASE;
-	dwc->link_state = DWC3_LINK_STATE_SS_DIS;
 	dwc3_ep0_out_start(dwc);
 
 	dwc3_gadget_enable_irq(dwc);
@@ -1803,27 +1802,13 @@ static void dwc3_gadget_free_endpoints(struct dwc3 *dwc)
 
 static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		struct dwc3_request *req, struct dwc3_trb *trb,
-		const struct dwc3_event_depevt *event, int status,
-		int chain)
+		const struct dwc3_event_depevt *event, int status)
 {
 	unsigned int		count;
 	unsigned int		s_pkt = 0;
 	unsigned int		trb_status;
 
 	trace_dwc3_complete_trb(dep, trb);
-
-	/*
-	 * If we're in the middle of series of chained TRBs and we
-	 * receive a short transfer along the way, DWC3 will skip
-	 * through all TRBs including the last TRB in the chain (the
-	 * where CHN bit is zero. DWC3 will also avoid clearing HWO
-	 * bit and SW has to do it manually.
-	 *
-	 * We're going to do that here to avoid problems of HW trying
-	 * to use bogus TRBs for transfers.
-	 */
-	if (chain && (trb->ctrl & DWC3_TRB_CTRL_HWO))
-		trb->ctrl &= ~DWC3_TRB_CTRL_HWO;
 
 	if ((trb->ctrl & DWC3_TRB_CTRL_HWO) && status != -ESHUTDOWN)
 		/*
@@ -1834,9 +1819,8 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		 * would help. Lets hope that if this occurs, someone
 		 * fixes the root cause instead of looking away :)
 		 */
-		dev_err(dwc->dev, "%s's TRB (%pK) still owned by HW\n",
+		dev_err(dwc->dev, "%s's TRB (%p) still owned by HW\n",
 				dep->name, trb);
-
 	count = trb->size & DWC3_TRB_SIZE_MASK;
 
 	if (dep->direction) {
@@ -1874,7 +1858,15 @@ static int __dwc3_cleanup_done_trbs(struct dwc3 *dwc, struct dwc3_ep *dep,
 			s_pkt = 1;
 	}
 
-	if (s_pkt && !chain)
+	/*
+	 * We assume here we will always receive the entire data block
+	 * which we should receive. Meaning, if we program RX to
+	 * receive 4K but we receive only 2K, we assume that's all we
+	 * should receive and we simply bounce the request back to the
+	 * gadget driver for further processing.
+	 */
+	req->request.actual += req->request.length - count;
+	if (s_pkt)
 		return 1;
 	if ((event->status & DEPEVT_STATUS_LST) &&
 			(trb->ctrl & (DWC3_TRB_CTRL_LST |
@@ -1893,19 +1885,14 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 	struct dwc3_trb		*trb;
 	unsigned int		slot;
 	unsigned int		i;
-	int			count = 0;
 	int			ret;
 
 	do {
-		int chain;
-
 		req = next_request(&dep->req_queued);
 		if (!req) {
 			WARN_ON_ONCE(1);
 			return 1;
 		}
-
-		chain = req->request.num_mapped_sgs > 0;
 		i = 0;
 		do {
 			slot = req->start_slot + i;
@@ -1914,22 +1901,13 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 				slot++;
 			slot %= DWC3_TRB_NUM;
 			trb = &dep->trb_pool[slot];
-			count += trb->size & DWC3_TRB_SIZE_MASK;
 
 			ret = __dwc3_cleanup_done_trbs(dwc, dep, req, trb,
-					event, status, chain);
+					event, status);
 			if (ret)
 				break;
 		}while (++i < req->request.num_mapped_sgs);
 
-		/*
-		 * We assume here we will always receive the entire data block
-		 * which we should receive. Meaning, if we program RX to
-		 * receive 4K but we receive only 2K, we assume that's all we
-		 * should receive and we simply bounce the request back to the
-		 * gadget driver for further processing.
-		 */
-		req->request.actual += req->request.length - count;
 		dwc3_gadget_giveback(dep, req, status);
 
 		if (ret)
@@ -1953,10 +1931,6 @@ static int dwc3_cleanup_done_reqs(struct dwc3 *dwc, struct dwc3_ep *dep,
 		return 1;
 	}
 
-	if (usb_endpoint_xfer_isoc(dep->endpoint.desc))
-		if ((event->status & DEPEVT_STATUS_IOC) &&
-				(trb->ctrl & DWC3_TRB_CTRL_IOC))
-			return 0;
 	return 1;
 }
 
@@ -2345,8 +2319,6 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 		dwc->gadget.speed = USB_SPEED_LOW;
 		break;
 	}
-
-	dwc->eps[1]->endpoint.maxpacket = dwc->gadget.ep0->maxpacket;
 
 	/* Enable USB2 LPM Capability */
 

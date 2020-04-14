@@ -1423,8 +1423,7 @@ static int parse_dirplusfile(char *buf, size_t nbytes, struct file *file,
 			*/
 			over = !dir_emit(ctx, dirent->name, dirent->namelen,
 				       dirent->ino, dirent->type);
-			if (!over)
-				ctx->pos = dirent->off;
+			ctx->pos = dirent->off;
 		}
 
 		buf += reclen;
@@ -1746,10 +1745,9 @@ int fuse_flush_times(struct inode *inode, struct fuse_file *ff)
  * vmtruncate() doesn't allow for this case, so do the rlimit checking
  * and the actual truncation by hand.
  */
-int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
+int fuse_do_setattr(struct inode *inode, struct iattr *attr,
 		    struct file *file)
 {
-	struct inode *inode = d_inode(dentry);
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
 	struct fuse_req *req;
@@ -1769,19 +1767,8 @@ int fuse_do_setattr(struct dentry *dentry, struct iattr *attr,
 		return err;
 
 	if (attr->ia_valid & ATTR_OPEN) {
-		/* This is coming from open(..., ... | O_TRUNC); */
-		WARN_ON(!(attr->ia_valid & ATTR_SIZE));
-		WARN_ON(attr->ia_size != 0);
-		if (fc->atomic_o_trunc) {
-			/*
-			 * No need to send request to userspace, since actual
-			 * truncation has already been done by OPEN.  But still
-			 * need to truncate page cache.
-			 */
-			i_size_write(inode, 0);
-			truncate_pagecache(inode, 0);
+		if (fc->atomic_o_trunc)
 			return 0;
-		}
 		file = NULL;
 	}
 
@@ -1880,9 +1867,9 @@ static int fuse_setattr(struct dentry *entry, struct iattr *attr)
 		return -EACCES;
 
 	if (attr->ia_valid & ATTR_FILE)
-		return fuse_do_setattr(entry, attr, attr->ia_file);
+		return fuse_do_setattr(inode, attr, attr->ia_file);
 	else
-		return fuse_do_setattr(entry, attr, NULL);
+		return fuse_do_setattr(inode, attr, NULL);
 }
 
 static int fuse_getattr(struct vfsmount *mnt, struct dentry *entry,

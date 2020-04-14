@@ -50,7 +50,6 @@ Module.symvers
 /vmlinuz
 /System.map
 /Module.markers
-
 #
 # Debian directory (make deb-pkg)
 #
@@ -100,7 +99,3 @@ x509.genkey
 
 # Kconfig presets
 all.config
-
-# needed for touchscreen driver
-!drivers/input/touchscreen/mediatek/lct_ft5446/include/firmware/*.i
-!drivers/input/touchscreen/mediatek/lct_hx8527/*.i

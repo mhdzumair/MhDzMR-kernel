@@ -406,12 +406,6 @@
 #define FTDI_4N_GALAXY_DE_3_PID	0xF3C2
 
 /*
- * Ivium Technologies product IDs
- */
-#define FTDI_PALMSENS_PID	0xf440
-#define FTDI_IVIUM_XSTAT_PID	0xf441
-
-/*
  * Linx Technologies product ids
  */
 #define LINX_SDMUSBQSS_PID	0xF448	/* Linx SDM-USB-QS-S */
@@ -566,9 +560,7 @@
 /*
  * NovaTech product ids (FTDI_VID)
  */
-#define FTDI_NT_ORIONLXM_PID		0x7c90	/* OrionLXm Substation Automation Platform */
-#define FTDI_NT_ORIONLX_PLUS_PID	0x7c91	/* OrionLX+ Substation Automation Platform */
-#define FTDI_NT_ORION_IO_PID		0x7c92	/* Orion I/O */
+#define FTDI_NT_ORIONLXM_PID	0x7c90	/* OrionLXm Substation Automation Platform */
 
 /*
  * Synapse Wireless product ids (FTDI_VID)
@@ -628,9 +620,8 @@
 /*
  * Infineon Technologies
  */
-#define INFINEON_VID		        0x058b
-#define INFINEON_TRIBOARD_TC1798_PID	0x0028 /* DAS JTAG TriBoard TC1798 V1.0 */
-#define INFINEON_TRIBOARD_TC2X7_PID	0x0043 /* DAS JTAG TriBoard TC2X7 V1.0 */
+#define INFINEON_VID		0x058b
+#define INFINEON_TRIBOARD_PID	0x0028 /* DAS JTAG TriBoard TC1798 V1.0 */
 
 /*
  * Acton Research Corp.
@@ -680,12 +671,6 @@
 #define INTREPID_VID		0x093C
 #define INTREPID_VALUECAN_PID	0x0601
 #define INTREPID_NEOVI_PID	0x0701
-
-/*
- * WICED USB UART
- */
-#define WICED_VID		0x0A5C
-#define WICED_USB20706V2_PID	0x6422
 
 /*
  * Definitions for ID TECH (www.idt-net.com) devices
@@ -869,17 +854,9 @@
 #define	FIC_VID			0x1457
 #define	FIC_NEO1973_DEBUG_PID	0x5118
 
-/*
- * Actel / Microsemi
- */
-#define ACTEL_VID				0x1514
-#define MICROSEMI_ARROW_SF2PLUS_BOARD_PID	0x2008
-
 /* Olimex */
 #define OLIMEX_VID			0x15BA
 #define OLIMEX_ARM_USB_OCD_PID		0x0003
-#define OLIMEX_ARM_USB_TINY_PID	0x0004
-#define OLIMEX_ARM_USB_TINY_H_PID	0x002a
 #define OLIMEX_ARM_USB_OCD_H_PID	0x002b
 
 /*
@@ -905,9 +882,6 @@
 /*
  * RT Systems programming cables for various ham radios
  */
-/* This device uses the VID of FTDI */
-#define RTSYSTEMS_USB_VX8_PID   0x9e50  /* USB-VX8 USB to 7 pin modular plug for Yaesu VX-8 radio */
-
 #define RTSYSTEMS_VID		0x2100	/* Vendor ID */
 #define RTSYSTEMS_USB_S03_PID	0x9001	/* RTS-03 USB to Serial Adapter */
 #define RTSYSTEMS_USB_59_PID	0x9e50	/* USB-59 USB to 8 pin plug */
@@ -1425,12 +1399,6 @@
  * ATI command output: Cinterion MC55i
  */
 #define FTDI_CINTERION_MC55I_PID	0xA951
-
-/*
- * Product: FirmwareHubEmulator
- * Manufacturer: Harman Becker Automotive Systems
- */
-#define FTDI_FHE_PID		0xA9A0
 
 /*
  * Product: Comet Caller ID decoder

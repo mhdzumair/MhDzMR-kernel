@@ -122,10 +122,8 @@ static int ip_rt_redirect_silence __read_mostly	= ((HZ / 50) << (9 + 1));
 static int ip_rt_error_cost __read_mostly	= HZ;
 static int ip_rt_error_burst __read_mostly	= 5 * HZ;
 static int ip_rt_mtu_expires __read_mostly	= 10 * 60 * HZ;
-static u32 ip_rt_min_pmtu __read_mostly		= 512 + 20 + 20;
+static int ip_rt_min_pmtu __read_mostly		= 512 + 20 + 20;
 static int ip_rt_min_advmss __read_mostly	= 256;
-
-static int ip_min_valid_pmtu __read_mostly	= IPV4_MIN_MTU;
 
 /*
  *	Interface to generic destination cache.
@@ -488,15 +486,13 @@ EXPORT_SYMBOL(ip_idents_reserve);
 void __ip_select_ident(struct iphdr *iph, int segs)
 {
 	static u32 ip_idents_hashrnd __read_mostly;
-	static u32 ip_idents_hashrnd_extra __read_mostly;
 	u32 hash, id;
 
 	net_get_random_once(&ip_idents_hashrnd, sizeof(ip_idents_hashrnd));
-	net_get_random_once(&ip_idents_hashrnd_extra, sizeof(ip_idents_hashrnd_extra));
 
 	hash = jhash_3words((__force u32)iph->daddr,
 			    (__force u32)iph->saddr,
-			    iph->protocol ^ ip_idents_hashrnd_extra,
+			    iph->protocol,
 			    ip_idents_hashrnd);
 	id = ip_idents_reserve(hash, segs);
 	iph->id = htons(id);
@@ -628,12 +624,9 @@ static void update_or_create_fnhe(struct fib_nh *nh, __be32 daddr, __be32 gw,
 	struct fnhe_hash_bucket *hash;
 	struct fib_nh_exception *fnhe;
 	struct rtable *rt;
-	u32 genid, hval;
 	unsigned int i;
 	int depth;
-
-	genid = fnhe_genid(dev_net(nh->nh_dev));
-	hval = fnhe_hashfun(daddr);
+	u32 hval = fnhe_hashfun(daddr);
 
 	spin_lock_bh(&fnhe_lock);
 
@@ -656,13 +649,12 @@ static void update_or_create_fnhe(struct fib_nh *nh, __be32 daddr, __be32 gw,
 	}
 
 	if (fnhe) {
-		if (fnhe->fnhe_genid != genid)
-			fnhe->fnhe_genid = genid;
 		if (gw)
 			fnhe->fnhe_gw = gw;
-		if (pmtu)
+		if (pmtu) {
 			fnhe->fnhe_pmtu = pmtu;
-		fnhe->fnhe_expires = max(1UL, expires);
+			fnhe->fnhe_expires = max(1UL, expires);
+		}
 		/* Update all cached dsts too */
 		rt = rcu_dereference(fnhe->fnhe_rth_input);
 		if (rt)
@@ -681,7 +673,7 @@ static void update_or_create_fnhe(struct fib_nh *nh, __be32 daddr, __be32 gw,
 			fnhe->fnhe_next = hash->chain;
 			rcu_assign_pointer(hash->chain, fnhe);
 		}
-		fnhe->fnhe_genid = genid;
+		fnhe->fnhe_genid = fnhe_genid(dev_net(nh->nh_dev));
 		fnhe->fnhe_daddr = daddr;
 		fnhe->fnhe_gw = gw;
 		fnhe->fnhe_pmtu = pmtu;
@@ -868,15 +860,13 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 	/* No redirected packets during ip_rt_redirect_silence;
 	 * reset the algorithm.
 	 */
-	if (time_after(jiffies, peer->rate_last + ip_rt_redirect_silence)) {
+	if (time_after(jiffies, peer->rate_last + ip_rt_redirect_silence))
 		peer->rate_tokens = 0;
-		peer->n_redirects = 0;
-	}
 
 	/* Too many ignored redirects; do not send anything
 	 * set dst.rate_last to the last seen redirected packet.
 	 */
-	if (peer->n_redirects >= ip_rt_redirect_number) {
+	if (peer->rate_tokens >= ip_rt_redirect_number) {
 		peer->rate_last = jiffies;
 		goto out_put_peer;
 	}
@@ -893,7 +883,6 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, gw);
 		peer->rate_last = jiffies;
 		++peer->rate_tokens;
-		++peer->n_redirects;
 #ifdef CONFIG_IP_ROUTE_VERBOSE
 		if (log_martians &&
 		    peer->rate_tokens == ip_rt_redirect_number)
@@ -1150,39 +1139,11 @@ static struct dst_entry *ipv4_dst_check(struct dst_entry *dst, u32 cookie)
 	return dst;
 }
 
-static void ipv4_send_dest_unreach(struct sk_buff *skb)
-{
-	struct ip_options opt;
-	int res;
-
-	/* Recompile ip options since IPCB may not be valid anymore.
-	 * Also check we have a reasonable ipv4 header.
-	 */
-	if (!pskb_network_may_pull(skb, sizeof(struct iphdr)) ||
-	    ip_hdr(skb)->version != 4 || ip_hdr(skb)->ihl < 5)
-		return;
-
-	memset(&opt, 0, sizeof(opt));
-	if (ip_hdr(skb)->ihl > 5) {
-		if (!pskb_network_may_pull(skb, ip_hdr(skb)->ihl * 4))
-			return;
-		opt.optlen = ip_hdr(skb)->ihl * 4 - sizeof(struct iphdr);
-
-		rcu_read_lock();
-		res = __ip_options_compile(dev_net(skb->dev), &opt, skb, NULL);
-		rcu_read_unlock();
-
-		if (res)
-			return;
-	}
-	__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, &opt);
-}
-
 static void ipv4_link_failure(struct sk_buff *skb)
 {
 	struct rtable *rt;
 
-	ipv4_send_dest_unreach(skb);
+	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
 
 	rt = skb_rtable(skb);
 	if (rt)
@@ -1876,7 +1837,6 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 {
 	int res;
 
-	tos &= IPTOS_RT_MASK;
 	rcu_read_lock();
 
 	/* Multicast recognition logic is moved from route cache to here.
@@ -1966,18 +1926,6 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 		 */
 		if (fi && res->prefixlen < 4)
 			fi = NULL;
-	} else if ((type == RTN_LOCAL) && (orig_oif != 0) &&
-		   (orig_oif != dev_out->ifindex)) {
-		/* For local routes that require a particular output interface
-		 * we do not want to cache the result.  Caching the result
-		 * causes incorrect behaviour when there are multiple source
-		 * addresses on the interface, the end result being that if the
-		 * intended recipient is waiting on that interface for the
-		 * packet he won't receive it because it will be delivered on
-		 * the loopback interface and the IP_PKTINFO ipi_ifindex will
-		 * be set to the loopback interface as well.
-		 */
-		fi = NULL;
 	}
 
 	fnhe = NULL;
@@ -2420,8 +2368,7 @@ static int rt_fill_info(struct net *net,  __be32 dst, __be32 src,
 		    IPV4_DEVCONF_ALL(net, MC_FORWARDING)) {
 			int err = ipmr_get_route(net, skb,
 						 fl4->saddr, fl4->daddr,
-						 r, nowait, portid);
-
+						 r, nowait);
 			if (err <= 0) {
 				if (!nowait) {
 					if (err == 0)
@@ -2677,8 +2624,7 @@ static struct ctl_table ipv4_route_table[] = {
 		.data		= &ip_rt_min_pmtu,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &ip_min_valid_pmtu,
+		.proc_handler	= proc_dointvec,
 	},
 	{
 		.procname	= "min_adv_mss",

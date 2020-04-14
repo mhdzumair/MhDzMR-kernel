@@ -1354,30 +1354,11 @@ UNUSUAL_DEV( 0x0bc2, 0x3010, 0x0000, 0x0000,
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_SANE_SENSE ),
 
-/* Reported by Kris Lindgren <kris.lindgren@gmail.com> */
-UNUSUAL_DEV( 0x0bc2, 0x3332, 0x0000, 0x9999,
-		"Seagate",
-		"External",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_NO_WP_DETECT ),
-
 UNUSUAL_DEV(  0x0d49, 0x7310, 0x0000, 0x9999,
 		"Maxtor",
 		"USB to SATA",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_SANE_SENSE),
-
-/*
- * Reported by Icenowy Zheng <icenowy@aosc.io>
- * The SMI SM3350 USB-UFS bridge controller will enter a wrong state
- * that do not process read/write command if a long sense is requested,
- * so force to use 18-byte sense.
- */
-UNUSUAL_DEV(  0x090c, 0x3350, 0x0000, 0xffff,
-		"SMI",
-		"SM3350 UFS-to-USB-Mass-Storage bridge",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_BAD_SENSE ),
 
 /*
  * Pete Zaitcev <zaitcev@yahoo.com>, bz#164688.
@@ -2125,13 +2106,6 @@ UNUSUAL_DEV(  0x22b8, 0x3010, 0x0001, 0x0001,
 		"RAZR V3x",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
 		US_FL_FIX_CAPACITY | US_FL_IGNORE_RESIDUE ),
-
-/* Reported by David Kozub <zub@linux.fjfi.cvut.cz> */
-UNUSUAL_DEV(0x152d, 0x0578, 0x0000, 0x9999,
-		"JMicron",
-		"JMS567",
-		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
-		US_FL_BROKEN_FUA),
 
 /*
  * Patch by Constantin Baranov <const@tltsu.ru>

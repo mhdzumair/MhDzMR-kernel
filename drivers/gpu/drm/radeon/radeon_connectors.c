@@ -804,7 +804,7 @@ static int radeon_lvds_get_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static enum drm_mode_status radeon_lvds_mode_valid(struct drm_connector *connector,
+static int radeon_lvds_mode_valid(struct drm_connector *connector,
 				  struct drm_display_mode *mode)
 {
 	struct drm_encoder *encoder = radeon_best_single_encoder(connector);
@@ -947,7 +947,7 @@ static int radeon_vga_get_modes(struct drm_connector *connector)
 	return ret;
 }
 
-static enum drm_mode_status radeon_vga_mode_valid(struct drm_connector *connector,
+static int radeon_vga_mode_valid(struct drm_connector *connector,
 				  struct drm_display_mode *mode)
 {
 	struct drm_device *dev = connector->dev;
@@ -1086,7 +1086,7 @@ static int radeon_tv_get_modes(struct drm_connector *connector)
 	return 1;
 }
 
-static enum drm_mode_status radeon_tv_mode_valid(struct drm_connector *connector,
+static int radeon_tv_mode_valid(struct drm_connector *connector,
 				struct drm_display_mode *mode)
 {
 	if ((mode->hdisplay > 1024) || (mode->vdisplay > 768))
@@ -1387,7 +1387,7 @@ static void radeon_dvi_force(struct drm_connector *connector)
 		radeon_connector->use_digital = true;
 }
 
-static enum drm_mode_status radeon_dvi_mode_valid(struct drm_connector *connector,
+static int radeon_dvi_mode_valid(struct drm_connector *connector,
 				  struct drm_display_mode *mode)
 {
 	struct drm_device *dev = connector->dev;
@@ -1666,7 +1666,7 @@ out:
 	return ret;
 }
 
-static enum drm_mode_status radeon_dp_mode_valid(struct drm_connector *connector,
+static int radeon_dp_mode_valid(struct drm_connector *connector,
 				  struct drm_display_mode *mode)
 {
 	struct drm_device *dev = connector->dev;
@@ -1949,6 +1949,7 @@ radeon_add_atom_connector(struct drm_device *dev,
 							   DRM_MODE_SCALE_NONE);
 			/* no HPD on analog connectors */
 			radeon_connector->hpd.hpd = RADEON_HPD_NONE;
+			connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 			connector->interlace_allowed = true;
 			connector->doublescan_allowed = true;
 			break;
@@ -2179,10 +2180,8 @@ radeon_add_atom_connector(struct drm_device *dev,
 	}
 
 	if (radeon_connector->hpd.hpd == RADEON_HPD_NONE) {
-		if (i2c_bus->valid) {
-			connector->polled = DRM_CONNECTOR_POLL_CONNECT |
-			                    DRM_CONNECTOR_POLL_DISCONNECT;
-		}
+		if (i2c_bus->valid)
+			connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 	} else
 		connector->polled = DRM_CONNECTOR_POLL_HPD;
 
@@ -2258,6 +2257,7 @@ radeon_add_legacy_connector(struct drm_device *dev,
 					      1);
 		/* no HPD on analog connectors */
 		radeon_connector->hpd.hpd = RADEON_HPD_NONE;
+		connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 		connector->interlace_allowed = true;
 		connector->doublescan_allowed = true;
 		break;
@@ -2342,13 +2342,10 @@ radeon_add_legacy_connector(struct drm_device *dev,
 	}
 
 	if (radeon_connector->hpd.hpd == RADEON_HPD_NONE) {
-		if (i2c_bus->valid) {
-			connector->polled = DRM_CONNECTOR_POLL_CONNECT |
-			                    DRM_CONNECTOR_POLL_DISCONNECT;
-		}
+		if (i2c_bus->valid)
+			connector->polled = DRM_CONNECTOR_POLL_CONNECT;
 	} else
 		connector->polled = DRM_CONNECTOR_POLL_HPD;
-
 	connector->display_info.subpixel_order = subpixel_order;
 	drm_connector_register(connector);
 }

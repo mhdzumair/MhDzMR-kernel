@@ -515,7 +515,6 @@ int jbd2_journal_start_reserved(handle_t *handle, unsigned int type,
 	 */
 	ret = start_this_handle(journal, handle, GFP_NOFS);
 	if (ret < 0) {
-		handle->h_journal = journal;
 		jbd2_journal_free_reserved(handle);
 		return ret;
 	}
@@ -1088,7 +1087,6 @@ int jbd2_journal_get_create_access(handle_t *handle, struct buffer_head *bh)
 		JBUFFER_TRACE(jh, "file as BJ_Reserved");
 		spin_lock(&journal->j_list_lock);
 		__jbd2_journal_file_buffer(jh, transaction, BJ_Reserved);
-		spin_unlock(&journal->j_list_lock);
 	} else if (jh->b_transaction == journal->j_committing_transaction) {
 		/* first access by this transaction */
 		jh->b_modified = 0;
@@ -1096,8 +1094,8 @@ int jbd2_journal_get_create_access(handle_t *handle, struct buffer_head *bh)
 		JBUFFER_TRACE(jh, "set next transaction");
 		spin_lock(&journal->j_list_lock);
 		jh->b_next_transaction = transaction;
-		spin_unlock(&journal->j_list_lock);
 	}
+	spin_unlock(&journal->j_list_lock);
 	jbd_unlock_bh_state(bh);
 
 	/*
@@ -1283,11 +1281,11 @@ int jbd2_journal_dirty_metadata(handle_t *handle, struct buffer_head *bh)
 		 * of the transaction. This needs to be done
 		 * once a transaction -bzzz
 		 */
+		jh->b_modified = 1;
 		if (handle->h_buffer_credits <= 0) {
 			ret = -ENOSPC;
 			goto out_unlock_bh;
 		}
-		jh->b_modified = 1;
 		handle->h_buffer_credits--;
 	}
 
@@ -1473,21 +1471,14 @@ int jbd2_journal_forget (handle_t *handle, struct buffer_head *bh)
 		/* However, if the buffer is still owned by a prior
 		 * (committing) transaction, we can't drop it yet... */
 		JBUFFER_TRACE(jh, "belongs to older transaction");
-		/* ... but we CAN drop it from the new transaction through
-		 * marking the buffer as freed and set j_next_transaction to
-		 * the new transaction, so that not only the commit code
-		 * knows it should clear dirty bits when it is done with the
-		 * buffer, but also the buffer can be checkpointed only
-		 * after the new transaction commits. */
+		/* ... but we CAN drop it from the new transaction if we
+		 * have also modified it since the original commit. */
 
-		set_buffer_freed(bh);
-
-		if (!jh->b_next_transaction) {
-			spin_lock(&journal->j_list_lock);
-			jh->b_next_transaction = transaction;
-			spin_unlock(&journal->j_list_lock);
-		} else {
+		if (jh->b_next_transaction) {
 			J_ASSERT(jh->b_next_transaction == transaction);
+			spin_lock(&journal->j_list_lock);
+			jh->b_next_transaction = NULL;
+			spin_unlock(&journal->j_list_lock);
 
 			/*
 			 * only drop a reference if this transaction modified

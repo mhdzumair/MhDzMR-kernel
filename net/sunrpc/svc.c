@@ -1061,8 +1061,6 @@ void svc_printk(struct svc_rqst *rqstp, const char *fmt, ...)
 static __printf(2,3) void svc_printk(struct svc_rqst *rqstp, const char *fmt, ...) {}
 #endif
 
-extern void svc_tcp_prep_reply_hdr(struct svc_rqst *);
-
 /*
  * Common routine for processing the RPC request.
  */
@@ -1092,8 +1090,7 @@ svc_process_common(struct svc_rqst *rqstp, struct kvec *argv, struct kvec *resv)
 	rqstp->rq_dropme = false;
 
 	/* Setup reply header */
-	if (rqstp->rq_prot == IPPROTO_TCP)
-		svc_tcp_prep_reply_hdr(rqstp);
+	rqstp->rq_xprt->xpt_ops->xpo_prep_reply_hdr(rqstp);
 
 	svc_putu32(resv, rqstp->rq_xid);
 
@@ -1140,8 +1137,7 @@ svc_process_common(struct svc_rqst *rqstp, struct kvec *argv, struct kvec *resv)
 	case SVC_DENIED:
 		goto err_bad_auth;
 	case SVC_CLOSE:
-		if (rqstp->rq_xprt &&
-		    test_bit(XPT_TEMP, &rqstp->rq_xprt->xpt_flags))
+		if (test_bit(XPT_TEMP, &rqstp->rq_xprt->xpt_flags))
 			svc_close_xprt(rqstp->rq_xprt);
 	case SVC_DROP:
 		goto dropit;
@@ -1351,10 +1347,10 @@ bc_svc_process(struct svc_serv *serv, struct rpc_rqst *req,
 	struct kvec	*resv = &rqstp->rq_res.head[0];
 
 	/* Build the svc_rqst used by the common processing routine */
+	rqstp->rq_xprt = serv->sv_bc_xprt;
 	rqstp->rq_xid = req->rq_xid;
 	rqstp->rq_prot = req->rq_xprt->prot;
 	rqstp->rq_server = serv;
-	rqstp->rq_bc_net = req->rq_xprt->xprt_net;
 
 	rqstp->rq_addrlen = sizeof(req->rq_xprt->addr);
 	memcpy(&rqstp->rq_addr, &req->rq_xprt->addr, rqstp->rq_addrlen);

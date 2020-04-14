@@ -53,7 +53,7 @@
 #include "stmmac.h"
 #include <linux/reset.h>
 
-#define	STMMAC_ALIGN(x)		__ALIGN_KERNEL(x, SMP_CACHE_BYTES)
+#define STMMAC_ALIGN(x)	L1_CACHE_ALIGN(x)
 
 /* Module parameters */
 #define TX_TIMEO	5000
@@ -277,13 +277,7 @@ bool stmmac_eee_init(struct stmmac_priv *priv)
 {
 	char *phy_bus_name = priv->plat->phy_bus_name;
 	unsigned long flags;
-	int interface = priv->plat->interface;
 	bool ret = false;
-
-	if ((interface != PHY_INTERFACE_MODE_MII) &&
-	    (interface != PHY_INTERFACE_MODE_GMII) &&
-	    !phy_interface_mode_is_rgmii(interface))
-		goto out;
 
 	/* Using PCS we cannot dial with the phy registers at this stage
 	 * so we do not support extra feature like EEE.
@@ -1736,6 +1730,8 @@ static int stmmac_open(struct net_device *dev)
 	struct stmmac_priv *priv = netdev_priv(dev);
 	int ret;
 
+	stmmac_check_ether_addr(priv);
+
 	if (priv->pcs != STMMAC_PCS_RGMII && priv->pcs != STMMAC_PCS_TBI &&
 	    priv->pcs != STMMAC_PCS_RTBI) {
 		ret = stmmac_init_phy(dev);
@@ -2821,8 +2817,6 @@ struct stmmac_priv *stmmac_dvr_probe(struct device *device,
 	ret = stmmac_hw_init(priv);
 	if (ret)
 		goto error_hw_init;
-
-	stmmac_check_ether_addr(priv);
 
 	ndev->netdev_ops = &stmmac_netdev_ops;
 

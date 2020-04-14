@@ -176,7 +176,7 @@
 			"Headphone Jack", "HPOUTR",
 			"IN2L", "Line In Jack",
 			"IN2R", "Line In Jack",
-			"Mic", "MICBIAS",
+			"MICBIAS", "IN1L",
 			"IN1L", "Mic";
 
 		atmel,ssc-controller = <&ssc0>;

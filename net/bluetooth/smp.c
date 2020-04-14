@@ -22,7 +22,6 @@
 
 #include <linux/crypto.h>
 #include <linux/scatterlist.h>
-#include <crypto/algapi.h>
 #include <crypto/b128ops.h>
 
 #include <net/bluetooth/bluetooth.h>
@@ -164,7 +163,7 @@ bool smp_irk_matches(struct hci_dev *hdev, u8 irk[16], bdaddr_t *bdaddr)
 	if (err)
 		return false;
 
-	return !crypto_memneq(bdaddr->b, hash, 3);
+	return !memcmp(bdaddr->b, hash, 3);
 }
 
 int smp_generate_rpa(struct hci_dev *hdev, u8 irk[16], bdaddr_t *rpa)
@@ -585,7 +584,7 @@ static u8 smp_random(struct smp_chan *smp)
 	if (ret)
 		return SMP_UNSPECIFIED;
 
-	if (crypto_memneq(smp->pcnf, confirm, sizeof(smp->pcnf))) {
+	if (memcmp(smp->pcnf, confirm, sizeof(smp->pcnf)) != 0) {
 		BT_ERR("Pairing failed (confirmation values mismatch)");
 		return SMP_CONFIRM_FAILED;
 	}
@@ -1178,14 +1177,8 @@ static u8 smp_cmd_security_req(struct l2cap_conn *conn, struct sk_buff *skb)
 	else
 		sec_level = authreq_to_seclevel(auth);
 
-	if (smp_sufficient_security(hcon, sec_level)) {
-		/* If link is already encrypted with sufficient security we
-		 * still need refresh encryption as per Core Spec 5.0 Vol 3,
-		 * Part H 2.4.6
-		 */
-		smp_ltk_encrypt(conn, hcon->sec_level);
+	if (smp_sufficient_security(hcon, sec_level))
 		return 0;
-	}
 
 	if (sec_level > hcon->pending_sec_level)
 		hcon->pending_sec_level = sec_level;

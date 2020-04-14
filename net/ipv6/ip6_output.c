@@ -159,37 +159,36 @@ int ip6_xmit(struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct in6_addr *first_hop = &fl6->daddr;
 	struct dst_entry *dst = skb_dst(skb);
-	unsigned int head_room;
 	struct ipv6hdr *hdr;
 	u8  proto = fl6->flowi6_proto;
 	int seg_len = skb->len;
 	int hlimit = -1;
 	u32 mtu;
 
-	head_room = sizeof(struct ipv6hdr) + LL_RESERVED_SPACE(dst->dev);
-	if (opt)
-		head_room += opt->opt_nflen + opt->opt_flen;
-
-	if (unlikely(skb_headroom(skb) < head_room)) {
-		struct sk_buff *skb2 = skb_realloc_headroom(skb, head_room);
-		if (!skb2) {
-			IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
-				      IPSTATS_MIB_OUTDISCARDS);
-			kfree_skb(skb);
-			return -ENOBUFS;
-		}
-		if (skb->sk)
-			skb_set_owner_w(skb2, skb->sk);
-		consume_skb(skb);
-		skb = skb2;
-	}
-
 	if (opt) {
-		seg_len += opt->opt_nflen + opt->opt_flen;
+		unsigned int head_room;
 
+		/* First: exthdrs may take lots of space (~8K for now)
+		   MAX_HEADER is not enough.
+		 */
+		head_room = opt->opt_nflen + opt->opt_flen;
+		seg_len += head_room;
+		head_room += sizeof(struct ipv6hdr) + LL_RESERVED_SPACE(dst->dev);
+
+		if (skb_headroom(skb) < head_room) {
+			struct sk_buff *skb2 = skb_realloc_headroom(skb, head_room);
+			if (skb2 == NULL) {
+				IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
+					      IPSTATS_MIB_OUTDISCARDS);
+				kfree_skb(skb);
+				return -ENOBUFS;
+			}
+			consume_skb(skb);
+			skb = skb2;
+			skb_set_owner_w(skb, sk);
+		}
 		if (opt->opt_flen)
 			ipv6_push_frag_opts(skb, opt, &proto);
-
 		if (opt->opt_nflen)
 			ipv6_push_nfrag_opts(skb, opt, &proto, &first_hop);
 	}
@@ -534,8 +533,6 @@ static void ip6_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 	to->dev = from->dev;
 	to->mark = from->mark;
 
-	skb_copy_hash(to, from);
-
 #ifdef CONFIG_NET_SCHED
 	to->tc_index = from->tc_index;
 #endif
@@ -546,15 +543,12 @@ static void ip6_copy_metadata(struct sk_buff *to, struct sk_buff *from)
 static void ipv6_select_ident(struct frag_hdr *fhdr, struct rt6_info *rt)
 {
 	static u32 ip6_idents_hashrnd __read_mostly;
-	static u32 ip6_idents_hashrnd_extra __read_mostly;
 	u32 hash, id;
 
 	net_get_random_once(&ip6_idents_hashrnd, sizeof(ip6_idents_hashrnd));
-	net_get_random_once(&ip6_idents_hashrnd_extra, sizeof(ip6_idents_hashrnd_extra));
 
 	hash = __ipv6_addr_jhash(&rt->rt6i_dst.addr, ip6_idents_hashrnd);
 	hash = __ipv6_addr_jhash(&rt->rt6i_src.addr, hash);
-	hash = jhash_1word(hash, ip6_idents_hashrnd_extra);
 
 	id = ip_idents_reserve(hash, 1);
 	fhdr->identification = htonl(id);
@@ -575,10 +569,7 @@ int ip6_fragment(struct sk_buff *skb, int (*output)(struct sk_buff *))
 	u8 *prevhdr, nexthdr = 0;
 	struct net *net = dev_net(skb_dst(skb)->dev);
 
-	err = ip6_find_1stfragopt(skb, &prevhdr);
-	if (err < 0)
-		goto fail;
-	hlen = err;
+	hlen = ip6_find_1stfragopt(skb, &prevhdr);
 	nexthdr = *prevhdr;
 
 	mtu = ip6_skb_dst_mtu(skb);
@@ -966,11 +957,6 @@ static int ip6_dst_lookup_tail(struct sock *sk,
 		}
 	}
 #endif
-	if (ipv6_addr_v4mapped(&fl6->saddr) &&
-	    !(ipv6_addr_v4mapped(&fl6->daddr) || ipv6_addr_any(&fl6->daddr))) {
-		err = -EAFNOSUPPORT;
-		goto out_err_release;
-	}
 
 	return 0;
 
@@ -1044,12 +1030,17 @@ struct dst_entry *ip6_sk_dst_lookup_flow(struct sock *sk, struct flowi6 *fl6,
 					 const struct in6_addr *final_dst)
 {
 	struct dst_entry *dst = sk_dst_check(sk, inet6_sk(sk)->dst_cookie);
+	int err;
 
 	dst = ip6_sk_dst_check(sk, dst, fl6);
-	if (!dst)
-		dst = ip6_dst_lookup_flow(sk, fl6, final_dst);
 
-	return dst;
+	err = ip6_dst_lookup_tail(sk, &dst, fl6);
+	if (err)
+		return ERR_PTR(err);
+	if (final_dst)
+		fl6->daddr = *final_dst;
+
+	return xfrm_lookup_route(sock_net(sk), dst, flowi6_to_flowi(fl6), sk, 0);
 }
 EXPORT_SYMBOL_GPL(ip6_sk_dst_lookup_flow);
 
@@ -1157,7 +1148,7 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 	struct ipv6_pinfo *np = inet6_sk(sk);
 	struct inet_cork *cork;
 	struct sk_buff *skb, *skb_prev = NULL;
-	unsigned int maxfraglen, fragheaderlen, mtu, orig_mtu, pmtu;
+	unsigned int maxfraglen, fragheaderlen, mtu, orig_mtu;
 	int exthdrlen;
 	int dst_exthdrlen;
 	int hh_len;
@@ -1178,11 +1169,11 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 			if (WARN_ON(np->cork.opt))
 				return -EINVAL;
 
-			np->cork.opt = kzalloc(sizeof(*opt), sk->sk_allocation);
+			np->cork.opt = kzalloc(opt->tot_len, sk->sk_allocation);
 			if (unlikely(np->cork.opt == NULL))
 				return -ENOBUFS;
 
-			np->cork.opt->tot_len = sizeof(*opt);
+			np->cork.opt->tot_len = opt->tot_len;
 			np->cork.opt->opt_flen = opt->opt_flen;
 			np->cork.opt->opt_nflen = opt->opt_nflen;
 
@@ -1265,12 +1256,6 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 		else
 			maxnonfragsize = mtu;
 
-		/* as per RFC 7112 section 5, the entire IPv6 Header Chain must fit
-		 * the first fragment
-		 */
-		if (headersize + transhdrlen > mtu)
-			goto emsgsize;
-
 		/* dontfrag active */
 		if ((cork->length + length > mtu - headersize) && dontfrag &&
 		    (sk->sk_protocol == IPPROTO_UDP ||
@@ -1282,8 +1267,9 @@ int ip6_append_data(struct sock *sk, int getfrag(void *from, char *to,
 
 		if (cork->length + length > maxnonfragsize - headersize) {
 emsgsize:
-			pmtu = max_t(int, mtu - headersize + sizeof(struct ipv6hdr), 0);
-			ipv6_local_error(sk, EMSGSIZE, fl6, pmtu);
+			ipv6_local_error(sk, EMSGSIZE, fl6,
+					 mtu - headersize +
+					 sizeof(struct ipv6hdr));
 			return -EMSGSIZE;
 		}
 	}
@@ -1390,11 +1376,6 @@ alloc_new_skb:
 			 */
 			alloclen += sizeof(struct frag_hdr);
 
-			copy = datalen - transhdrlen - fraggap;
-			if (copy < 0) {
-				err = -EINVAL;
-				goto error;
-			}
 			if (transhdrlen) {
 				skb = sock_alloc_send_skb(sk,
 						alloclen + hh_len,
@@ -1444,9 +1425,13 @@ alloc_new_skb:
 				data += fraggap;
 				pskb_trim_unique(skb_prev, maxfraglen);
 			}
-			if (copy > 0 &&
-			    getfrag(from, data + transhdrlen, offset,
-				    copy, fraggap, skb) < 0) {
+			copy = datalen - transhdrlen - fraggap;
+
+			if (copy < 0) {
+				err = -EINVAL;
+				kfree_skb(skb);
+				goto error;
+			} else if (copy > 0 && getfrag(from, data + transhdrlen, offset, copy, fraggap, skb) < 0) {
 				err = -EFAULT;
 				kfree_skb(skb);
 				goto error;
@@ -1468,8 +1453,7 @@ alloc_new_skb:
 		if (copy > length)
 			copy = length;
 
-		if (!(rt->dst.dev->features&NETIF_F_SG) &&
-		    skb_tailroom(skb) >= copy) {
+		if (!(rt->dst.dev->features&NETIF_F_SG)) {
 			unsigned int off;
 
 			off = skb->len;

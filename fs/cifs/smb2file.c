@@ -104,14 +104,12 @@ smb2_unlock_range(struct cifsFileInfo *cfile, struct file_lock *flock,
 
 	/*
 	 * Accessing maxBuf is racy with cifs_reconnect - need to store value
-	 * and check it before using.
+	 * and check it for zero before using.
 	 */
 	max_buf = tcon->ses->server->maxBuf;
-	if (max_buf < sizeof(struct smb2_lock_element))
+	if (!max_buf)
 		return -EINVAL;
 
-	BUILD_BUG_ON(sizeof(struct smb2_lock_element) > PAGE_SIZE);
-	max_buf = min_t(unsigned int, max_buf, PAGE_SIZE);
 	max_num = max_buf / sizeof(struct smb2_lock_element);
 	buf = kzalloc(max_num * sizeof(struct smb2_lock_element), GFP_KERNEL);
 	if (!buf)
@@ -243,13 +241,11 @@ smb2_push_mandatory_locks(struct cifsFileInfo *cfile)
 	 * and check it for zero before using.
 	 */
 	max_buf = tlink_tcon(cfile->tlink)->ses->server->maxBuf;
-	if (max_buf < sizeof(struct smb2_lock_element)) {
+	if (!max_buf) {
 		free_xid(xid);
 		return -EINVAL;
 	}
 
-	BUILD_BUG_ON(sizeof(struct smb2_lock_element) > PAGE_SIZE);
-	max_buf = min_t(unsigned int, max_buf, PAGE_SIZE);
 	max_num = max_buf / sizeof(struct smb2_lock_element);
 	buf = kzalloc(max_num * sizeof(struct smb2_lock_element), GFP_KERNEL);
 	if (!buf) {

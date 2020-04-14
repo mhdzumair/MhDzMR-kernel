@@ -522,8 +522,6 @@ static int sr_block_open(struct block_device *bdev, fmode_t mode)
 	struct scsi_cd *cd;
 	int ret = -ENXIO;
 
-	check_disk_change(bdev);
-
 	mutex_lock(&sr_mutex);
 	cd = scsi_cd_get(bdev->bd_disk);
 	if (cd) {
@@ -589,28 +587,18 @@ out:
 static unsigned int sr_block_check_events(struct gendisk *disk,
 					  unsigned int clearing)
 {
-	unsigned int ret = 0;
-	struct scsi_cd *cd;
+	struct scsi_cd *cd = scsi_cd(disk);
 
-	cd = scsi_cd_get(disk);
-	if (!cd)
+	if (atomic_read(&cd->device->disk_events_disable_depth))
 		return 0;
 
-	if (!atomic_read(&cd->device->disk_events_disable_depth))
-		ret = cdrom_check_events(&cd->cdi, clearing);
-
-	scsi_cd_put(cd);
-	return ret;
+	return cdrom_check_events(&cd->cdi, clearing);
 }
 
 static int sr_block_revalidate_disk(struct gendisk *disk)
 {
+	struct scsi_cd *cd = scsi_cd(disk);
 	struct scsi_sense_hdr sshdr;
-	struct scsi_cd *cd;
-
-	cd = scsi_cd_get(disk);
-	if (!cd)
-		return -ENXIO;
 
 	/* if the unit is not ready, nothing more to do */
 	if (scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr))
@@ -619,7 +607,6 @@ static int sr_block_revalidate_disk(struct gendisk *disk)
 	sr_cd_check(&cd->cdi);
 	get_sectorsize(cd);
 out:
-	scsi_cd_put(cd);
 	return 0;
 }
 
@@ -852,7 +839,6 @@ static void get_capabilities(struct scsi_cd *cd)
 	unsigned char *buffer;
 	struct scsi_mode_data data;
 	struct scsi_sense_hdr sshdr;
-	unsigned int ms_len = 128;
 	int rc, n;
 
 	static const char *loadmech[] =
@@ -879,11 +865,10 @@ static void get_capabilities(struct scsi_cd *cd)
 	scsi_test_unit_ready(cd->device, SR_TIMEOUT, MAX_RETRIES, &sshdr);
 
 	/* ask for mode page 0x2a */
-	rc = scsi_mode_sense(cd->device, 0, 0x2a, buffer, ms_len,
+	rc = scsi_mode_sense(cd->device, 0, 0x2a, buffer, 128,
 			     SR_TIMEOUT, 3, &data, NULL);
 
-	if (!scsi_status_is_good(rc) || data.length > ms_len ||
-	    data.header_length + data.block_descriptor_length > data.length) {
+	if (!scsi_status_is_good(rc)) {
 		/* failed, drive doesn't have capabilities mode page */
 		cd->cdi.speed = 1;
 		cd->cdi.mask |= (CDC_CD_R | CDC_CD_RW | CDC_DVD_R |

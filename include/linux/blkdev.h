@@ -340,7 +340,6 @@ struct request_queue {
 	struct request_list	root_rl;
 
 	request_fn_proc		*request_fn;
-	request_fn_proc		*urgent_request_fn;
 	make_request_fn		*make_request_fn;
 	prep_rq_fn		*prep_rq_fn;
 	unprep_rq_fn		*unprep_rq_fn;
@@ -461,8 +460,6 @@ struct request_queue {
 #endif
 
 	struct queue_limits	limits;
-	bool			notified_urgent;
-	bool			dispatched_urgent;
 
 	/*
 	 * sg stuff
@@ -536,7 +533,7 @@ struct request_queue {
 #define QUEUE_FLAG_DEFAULT	((1 << QUEUE_FLAG_IO_STAT) |		\
 				 (1 << QUEUE_FLAG_STACKABLE)	|	\
 				 (1 << QUEUE_FLAG_SAME_COMP)	|	\
-				 (0 << QUEUE_FLAG_ADD_RANDOM))
+				 (1 << QUEUE_FLAG_ADD_RANDOM))
 
 #define QUEUE_FLAG_MQ_DEFAULT	((1 << QUEUE_FLAG_IO_STAT) |		\
 				 (1 << QUEUE_FLAG_SAME_COMP))
@@ -639,7 +636,7 @@ static inline void queue_flag_clear(unsigned int flag, struct request_queue *q)
 
 #define list_entry_rq(ptr)	list_entry((ptr), struct request, queuelist)
 
-#define rq_data_dir(rq)		((int)((rq)->cmd_flags & 1))
+#define rq_data_dir(rq)		(((rq)->cmd_flags & 1) != 0)
 
 /*
  * Driver can handle struct request, if it either has an old style
@@ -818,8 +815,6 @@ extern struct request *blk_make_request(struct request_queue *, struct bio *,
 					gfp_t);
 extern void blk_rq_set_block_pc(struct request *);
 extern void blk_requeue_request(struct request_queue *, struct request *);
-extern int blk_reinsert_request(struct request_queue *q, struct request *rq);
-extern bool blk_reinsert_req_sup(struct request_queue *q);
 extern void blk_add_request_payload(struct request *rq, struct page *page,
 		unsigned int len);
 extern int blk_rq_check_limits(struct request_queue *q, struct request *rq);
@@ -944,8 +939,8 @@ static inline unsigned int blk_max_size_offset(struct request_queue *q,
 	if (!q->limits.chunk_sectors)
 		return q->limits.max_sectors;
 
-	return min(q->limits.max_sectors, (unsigned int)(q->limits.chunk_sectors -
-			(offset & (q->limits.chunk_sectors - 1))));
+	return q->limits.chunk_sectors -
+			(offset & (q->limits.chunk_sectors - 1));
 }
 
 static inline unsigned int blk_rq_get_max_sectors(struct request *rq)
@@ -1028,7 +1023,6 @@ extern struct request_queue *blk_init_queue_node(request_fn_proc *rfn,
 extern struct request_queue *blk_init_queue(request_fn_proc *, spinlock_t *);
 extern struct request_queue *blk_init_allocated_queue(struct request_queue *,
 						      request_fn_proc *, spinlock_t *);
-extern void blk_urgent_request(struct request_queue *q, request_fn_proc *fn);
 extern void blk_cleanup_queue(struct request_queue *);
 extern void blk_queue_make_request(struct request_queue *, make_request_fn *);
 extern void blk_queue_bounce_limit(struct request_queue *, u64);

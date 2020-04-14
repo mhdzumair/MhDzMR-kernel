@@ -35,9 +35,6 @@
 #include <sound/initval.h>
 #include <linux/kmod.h>
 
-/* internal flags */
-#define SNDRV_TIMER_IFLG_PAUSED		0x00010000
-
 #if IS_ENABLED(CONFIG_SND_HRTIMER)
 #define DEFAULT_TIMER_LIMIT 4
 #elif IS_ENABLED(CONFIG_SND_RTCTIMER)
@@ -299,21 +296,8 @@ int snd_timer_open(struct snd_timer_instance **ti,
 		get_device(&timer->card->card_dev);
 	timeri->slave_class = tid->dev_sclass;
 	timeri->slave_id = slave_id;
-
-	if (list_empty(&timer->open_list_head) && timer->hw.open) {
-		int err = timer->hw.open(timer);
-		if (err) {
-			kfree(timeri->owner);
-			kfree(timeri);
-
-			if (timer->card)
-				put_device(&timer->card->card_dev);
-			module_put(timer->module);
-			mutex_unlock(&register_mutex);
-			return err;
-		}
-	}
-
+	if (list_empty(&timer->open_list_head) && timer->hw.open)
+		timer->hw.open(timer);
 	list_add_tail(&timeri->open_list, &timer->open_list_head);
 	snd_timer_check_master(timeri);
 	mutex_unlock(&register_mutex);
@@ -550,10 +534,6 @@ static int snd_timer_stop1(struct snd_timer_instance *timeri, bool stop)
 		}
 	}
 	timeri->flags &= ~(SNDRV_TIMER_IFLG_RUNNING | SNDRV_TIMER_IFLG_START);
-	if (stop)
-		timeri->flags &= ~SNDRV_TIMER_IFLG_PAUSED;
-	else
-		timeri->flags |= SNDRV_TIMER_IFLG_PAUSED;
 	snd_timer_notify1(timeri, stop ? SNDRV_TIMER_EVENT_STOP :
 			  SNDRV_TIMER_EVENT_CONTINUE);
  unlock:
@@ -615,10 +595,6 @@ int snd_timer_stop(struct snd_timer_instance *timeri)
  */
 int snd_timer_continue(struct snd_timer_instance *timeri)
 {
-	/* timer can continue only after pause */
-	if (!(timeri->flags & SNDRV_TIMER_IFLG_PAUSED))
-		return -EINVAL;
-
 	if (timeri->flags & SNDRV_TIMER_IFLG_SLAVE)
 		return snd_timer_start_slave(timeri, false);
 	else
@@ -847,7 +823,6 @@ int snd_timer_new(struct snd_card *card, char *id, struct snd_timer_id *tid,
 	timer->tmr_subdevice = tid->subdevice;
 	if (id)
 		strlcpy(timer->id, id, sizeof(timer->id));
-	timer->sticks = 1;
 	INIT_LIST_HEAD(&timer->device_list);
 	INIT_LIST_HEAD(&timer->open_list_head);
 	INIT_LIST_HEAD(&timer->active_list_head);
@@ -1062,8 +1037,8 @@ static int snd_timer_s_start(struct snd_timer * timer)
 		njiff += timer->sticks - priv->correction;
 		priv->correction = 0;
 	}
-	priv->last_expires = njiff;
-	mod_timer(&priv->tlist, njiff);
+	priv->last_expires = priv->tlist.expires = njiff;
+	add_timer(&priv->tlist);
 	return 0;
 }
 
@@ -1620,7 +1595,6 @@ static int snd_timer_user_tselect(struct file *file,
 	if (err < 0)
 		goto __err;
 
-	tu->qhead = tu->qtail = tu->qused = 0;
 	kfree(tu->queue);
 	tu->queue = NULL;
 	kfree(tu->tqueue);
@@ -1840,9 +1814,6 @@ static int snd_timer_user_continue(struct file *file)
 	tu = file->private_data;
 	if (!tu->timeri)
 		return -EBADFD;
-	/* start timer instead of continue if it's not used before */
-	if (!(tu->timeri->flags & SNDRV_TIMER_IFLG_PAUSED))
-		return snd_timer_user_start(file);
 	tu->timeri->lost = 0;
 	return (err = snd_timer_continue(tu->timeri)) < 0 ? err : 0;
 }
@@ -1984,7 +1955,6 @@ static ssize_t snd_timer_user_read(struct file *file, char __user *buffer,
 
 		qhead = tu->qhead++;
 		tu->qhead %= tu->queue_size;
-		tu->qused--;
 		spin_unlock_irq(&tu->qlock);
 
 		if (tu->tread) {
@@ -1998,6 +1968,7 @@ static ssize_t snd_timer_user_read(struct file *file, char __user *buffer,
 		}
 
 		spin_lock_irq(&tu->qlock);
+		tu->qused--;
 		if (err < 0)
 			goto _error;
 		result += unit;

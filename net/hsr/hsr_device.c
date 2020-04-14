@@ -93,8 +93,9 @@ static void hsr_check_announce(struct net_device *hsr_dev,
 	if ((hsr_dev->operstate == IF_OPER_UP) && (old_operstate != IF_OPER_UP)) {
 		/* Went up */
 		hsr->announce_count = 0;
-		mod_timer(&hsr->announce_timer,
-			  jiffies + msecs_to_jiffies(HSR_ANNOUNCE_INTERVAL));
+		hsr->announce_timer.expires = jiffies +
+				msecs_to_jiffies(HSR_ANNOUNCE_INTERVAL);
+		add_timer(&hsr->announce_timer);
 	}
 
 	if ((hsr_dev->operstate != IF_OPER_UP) && (old_operstate == IF_OPER_UP))
@@ -322,7 +323,6 @@ static void hsr_announce(unsigned long data)
 {
 	struct hsr_priv *hsr;
 	struct hsr_port *master;
-	unsigned long interval;
 
 	hsr = (struct hsr_priv *) data;
 
@@ -337,12 +337,14 @@ static void hsr_announce(unsigned long data)
 	}
 
 	if (hsr->announce_count < 3)
-		interval = msecs_to_jiffies(HSR_ANNOUNCE_INTERVAL);
+		hsr->announce_timer.expires = jiffies +
+				msecs_to_jiffies(HSR_ANNOUNCE_INTERVAL);
 	else
-		interval = msecs_to_jiffies(HSR_LIFE_CHECK_INTERVAL);
+		hsr->announce_timer.expires = jiffies +
+				msecs_to_jiffies(HSR_LIFE_CHECK_INTERVAL);
 
 	if (is_admin_up(master->dev))
-		mod_timer(&hsr->announce_timer, jiffies + interval);
+		add_timer(&hsr->announce_timer);
 
 	rcu_read_unlock();
 }
@@ -472,7 +474,7 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 
 	res = hsr_add_port(hsr, hsr_dev, HSR_PT_MASTER);
 	if (res)
-		goto err_add_port;
+		return res;
 
 	res = register_netdevice(hsr_dev);
 	if (res)
@@ -493,8 +495,6 @@ int hsr_dev_finalize(struct net_device *hsr_dev, struct net_device *slave[2],
 fail:
 	hsr_for_each_port(hsr, port)
 		hsr_del_port(port);
-err_add_port:
-	hsr_del_node(&hsr->self_node_db);
 
 	return res;
 }
