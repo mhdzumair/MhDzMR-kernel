@@ -1819,8 +1819,6 @@ long do_fork(unsigned long clone_flags,
 		/* mt shceduler profiling*/
 		save_mtproc_info(p, sched_clock());
 #endif
-		/* mt throttle monitor */
-		save_mt_rt_mon_info(p, sched_clock());
 #endif
 		wake_up_new_task(p);
 
