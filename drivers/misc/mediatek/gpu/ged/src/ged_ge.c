@@ -54,16 +54,6 @@ static void *_get_debugfs_seq_nextx(loff_t *pos)
 
 static void *_ge_debugfs_seq_start(struct seq_file *m, loff_t *pos)
 {
-		num_entry = (int)*pos;
-		return list_first_entry(&ge_entry_list_head, GEEntry, ge_entry_list);
-	}
-	return NULL;
-}
-void _ge_debugfs_seq_stop(struct seq_file *m, void *v)
-{
-	seq_puts(m, "================================================\n");
-	seq_printf(m, "Total entries: %d\n", num_entry);
-=======
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
