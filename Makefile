@@ -1,6 +1,6 @@
 VERSION = 3
 PATCHLEVEL = 18
-SUBLEVEL = 35
+SUBLEVEL = 140
 EXTRAVERSION =
 NAME = Shuffling Zombie Juror
 
@@ -214,7 +214,6 @@ VPATH		:= $(srctree)$(if $(KBUILD_EXTMOD),:$(KBUILD_EXTMOD))
 
 export srctree objtree VPATH
 
-
 # SUBARCH tells the usermode build what the underlying arch is.  That is set
 # first, and if a usermode build is happening, the "ARCH=um" on the command
 # line overrides the setting of ARCH below.  If a native build is happening,
@@ -402,6 +401,8 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
+		   -mtune=cortex-a53 \
+           -march=armv8-a \
 		   -std=gnu89
 
 KBUILD_AFLAGS_KERNEL :=
@@ -610,12 +611,25 @@ all: vmlinux
 include $(srctree)/arch/$(SRCARCH)/Makefile
 
 KBUILD_CFLAGS	+= $(call cc-option,-fno-delete-null-pointer-checks,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning,frame-address,)
+KBUILD_CFLAGS	+= $(call cc-disable-warning, format-truncation)
+KBUILD_CFLAGS	+= $(call cc-disable-warning, format-overflow)
+KBUILD_CFLAGS	+= $(call cc-disable-warning, int-in-bool-context)
+KBUILD_CFLAGS	+= $(call cc-disable-warning, attribute-alias)
+KBUILD_CFLAGS	+= $(call cc-option,-fno-PIE)
+KBUILD_AFLAGS	+= $(call cc-option,-fno-PIE)
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
+#ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os $(call cc-disable-warning,maybe-uninitialized,)
-else
-KBUILD_CFLAGS	+= -O2
-endif
+#else
+#KBUILD_CFLAGS	+= -O2
+#endif
+ 
+#needed to unbrick gcc-7.x for shitty mtk
+KBUILD_CFLAGS   += $(call cc-option,-fno-store-merging,)
+KBUILD_CFLAGS   += $(call cc-disable-warning, misleading-indentation)
+KBUILD_CFLAGS   += $(call cc-disable-warning, duplicate-decl-specifier)
+KBUILD_CFLAGS   += $(call cc-disable-warning, logical-not-parentheses)
 
 # Tell gcc to never replace conditional load with a non-conditional one
 KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
@@ -754,8 +768,14 @@ KBUILD_CFLAGS += $(call cc-option,-Wdeclaration-after-statement,)
 # disable pointer signed / unsigned warnings in gcc 4.0
 KBUILD_CFLAGS += $(call cc-disable-warning, pointer-sign)
 
+# disable stringop warnings in gcc 8+
+KBUILD_CFLAGS += $(call cc-disable-warning, stringop-truncation)
+
 # disable invalid "can't wrap" optimizations for signed / pointers
 KBUILD_CFLAGS	+= $(call cc-option,-fno-strict-overflow)
+
+# Make sure -fstack-check isn't enabled (like gentoo apparently did)
+KBUILD_CFLAGS  += $(call cc-option,-fno-stack-check,)
 
 # conserve stack if available
 KBUILD_CFLAGS   += $(call cc-option,-fconserve-stack)
@@ -1497,11 +1517,11 @@ image_name:
 # Clear a bunch of variables before executing the submake
 tools/: FORCE
 	$(Q)mkdir -p $(objtree)/tools
-	$(Q)$(MAKE) LDFLAGS= MAKEFLAGS="$(filter --j% -j,$(MAKEFLAGS))" O=$(objtree) subdir=tools -C $(src)/tools/
+	$(Q)$(MAKE) LDFLAGS= MAKEFLAGS="$(filter --j% -j,$(MAKEFLAGS))" O=$(O) subdir=tools -C $(src)/tools/
 
 tools/%: FORCE
 	$(Q)mkdir -p $(objtree)/tools
-	$(Q)$(MAKE) LDFLAGS= MAKEFLAGS="$(filter --j% -j,$(MAKEFLAGS))" O=$(objtree) subdir=tools -C $(src)/tools/ $*
+	$(Q)$(MAKE) LDFLAGS= MAKEFLAGS="$(filter --j% -j,$(MAKEFLAGS))" O=$(O) subdir=tools -C $(src)/tools/ $*
 
 # Single targets
 # ---------------------------------------------------------------------------
