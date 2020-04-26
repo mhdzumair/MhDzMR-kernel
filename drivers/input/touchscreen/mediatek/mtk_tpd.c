@@ -394,7 +394,7 @@ static int tpd_fb_notifier_callback(struct notifier_block *self, unsigned long e
 #ifdef CONFIG_TOUCHSCREEN_SMARTWAKE
 			if (g_tpd_drv && (!tpd_suspend_flag || !smartwake_switch)) {
 #else
-                        if ((g_tpd_drv && !tpd_suspend_flag){
+                        if (g_tpd_drv && !tpd_suspend_flag){
 #endif
 				err = cancel_work_sync(&touch_resume_work);
 				if (!err)
