@@ -142,3 +142,4 @@ ifeq ($(CONFIG_CUSTOM_KERNEL_HDMI), "MT8193")
 ccflags-y +=    -DHDMI_MT8193_SUPPORT
 endif
 
+obj-$(CONFIG_MTK_KCAL_CTRL) += mtk_kcal_ctrl.o
