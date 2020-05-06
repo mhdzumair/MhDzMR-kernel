@@ -13,3 +13,9 @@ config LCT_VIBR_FACTORY_SUPPORT
 	Vibrator flag support for longcheer factory test
 	If you say y, you enable module param enable support
 	If you wantn't to use it ,say n as default
+
+config THUNDERQUAKE_ENGINE_GPL
+       tristate "Vibrator Intensity Controller for MTK Vibrator"
+       default y
+       help
+         Vibrator Intensity Controller for MTK Vibrator v1.0
