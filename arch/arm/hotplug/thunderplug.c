@@ -22,10 +22,10 @@
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
-#include <linux/earlysuspend.h>
+#include <linux/powersuspend.h>
 #include "thunderplug.h"
 
-#define DEBUG                         1
+#define DEBUG                        0
 
 #define THUNDERPLUG                  "thunderplug"
 
@@ -480,12 +480,12 @@ static void __cpuinit tplug_work_fn(struct work_struct *work)
 
 }
 
-static void tplug_es_suspend_work(struct early_suspend *p) {
+static void tplug_es_suspend_work(struct power_suspend *p) {
 	isSuspended = true;
 	pr_info("thunderplug : suspend called\n");
 }
 
-static void tplug_es_resume_work(struct early_suspend *p) {
+static void tplug_es_resume_work(struct power_suspend *p) {
 	isSuspended = false;
 #ifdef CONFIG_SCHED_HMP
 	if(tplug_hp_style==1)
@@ -499,6 +499,12 @@ static void tplug_es_resume_work(struct early_suspend *p) {
 		            msecs_to_jiffies(10));
 	pr_info("thunderplug : resume called\n");
 }
+
+static struct power_suspend tplug_power_suspend_handler =
+	{
+		.suspend = tplug_es_suspend_work,
+		.resume = tplug_es_resume_work,
+	};
 
 /* Thunderplug load balancer */
 #ifdef CONFIG_SCHED_HMP
@@ -680,7 +686,7 @@ static int __init thunderplug_init(void)
         int ret = 0;
         int sysfs_result;
         printk(KERN_DEBUG "[%s]\n",__func__);
-		register_early_suspend(&tplug_early_suspend_handler);
+		register_power_suspend(&tplug_power_suspend_handler);
 
         thunderplug_kobj = kobject_create_and_add("thunderplug", kernel_kobj);
 
