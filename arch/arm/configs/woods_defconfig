@@ -743,3 +743,6 @@ CONFIG_POWERSUSPEND=y
 
 #wifi pm driver
 CONFIG_MTK_WIFI_PM_CONTROL=y
+
+#wifi tethering support in wlan0
+#CONFIG_MTK_COMBO_AOSP_TETHERING_SUPPORT=y
