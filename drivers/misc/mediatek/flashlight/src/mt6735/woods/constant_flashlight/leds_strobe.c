@@ -86,7 +86,10 @@ static int g_duty = -1;
 static int g_timeOutTimeMs;
 
 static DEFINE_MUTEX(g_strobeSem);
-
+//Added by Mohamed Zumair for flashlight sys path
+static struct class *flashlight_class = NULL;
+static struct device *flashlight_dev = NULL;
+unsigned int flashlight_status = 0;
 
 #define STROBE_DEVICE_ID 0xC6
 //wangkangmin@wind-mobi.com 20161108 begin
@@ -108,7 +111,7 @@ int FL_Enable(void)
 		g_duty=0;
 	}
 	if(g_duty==0){
-	
+
 	printk("enable torch mode \n");
 
 	flashlight_gpio_set(0, 1);
@@ -119,7 +122,7 @@ int FL_Enable(void)
 	{
 	printk("enable flash mode \n");
 	flashlight_gpio_set(1, 0);
-	
+
 	mdelay(6);
 	mt_set_gpio_mode(GPIO80 | 0x80000000, GPIO_MODE_05);
 	mt_set_gpio_dir(GPIO80 | 0x80000000,1);
@@ -199,7 +202,7 @@ int FL_Enable(void)
 		flashlight_gpio_set(1, 1);
 	}
 	PK_DBG(" FL_Enable line=%d\n", __LINE__);
-	
+
 	return 0;
 
 }
@@ -209,7 +212,7 @@ int FL_Enable(void)
 int FL_Disable(void)
 {
 	flashlight_gpio_set(1, 0);
-	
+
 	mt_set_gpio_mode(GPIO80 | 0x80000000, GPIO_MODE_00);
 	mt_set_gpio_dir(GPIO80 | 0x80000000,1);
 	flashlight_gpio_set(0, 0);
@@ -230,7 +233,7 @@ int FL_dim_duty(kal_uint32 duty)
 int FL_Init(void)
 {
 	flashlight_gpio_set(0, 0);
-	PK_DBG(" FL_Init line=%d\n", __LINE__); 
+	PK_DBG(" FL_Init line=%d\n", __LINE__);
 	return 0;
 }
 //wangkangmin@wind-mobi.com 20161108 end
@@ -423,3 +426,65 @@ ssize_t strobe_VDIrq(void)
 	return 0;
 }
 EXPORT_SYMBOL(strobe_VDIrq);
+
+static ssize_t get_flashlight_status(struct device *dev,
+        struct device_attribute *attr, char *buf) {
+    PK_DBG("[Flashlight] get flashlight status is:%d \n", flashlight_status);
+    return sprintf(buf, "%u\n", flashlight_status);
+}
+
+static ssize_t set_flashlight_status(struct device *dev,
+        struct device_attribute *attr, const char *buf, size_t size)
+{
+    int value = simple_strtoul(buf, NULL, 0);
+    flashlight_status = value;
+
+    if (value>=1 && value<= 255) // enable flashlight
+    {
+        PK_DBG("[Flashlight] set flashlight status: on");
+	FL_Enable();
+    }
+    else // disable flashlight
+    {
+        PK_DBG("[Flashlight] set flashlight status: off");
+	FL_Disable();
+    }
+    return size;
+}
+
+static DEVICE_ATTR(brightness, 0664, get_flashlight_status, set_flashlight_status);
+static int __init flashlight_init(void)
+{
+    PK_DBG("[Flashlight] init: Start, driver by mhdzumair\n");
+    flashlight_class = class_create(THIS_MODULE , "led");
+    if (IS_ERR(flashlight_class)) {
+        PK_DBG("[Flashlight] init: Error!\n");
+        return 0;
+    }
+
+    flashlight_dev = device_create(flashlight_class, NULL, 0, 0, "flashlight");
+    if(NULL != flashlight_dev){
+        device_create_file(flashlight_dev, &dev_attr_brightness);
+        PK_DBG("[Flashlight] init: Done!\n");
+        return 0;
+    } else {
+        PK_DBG("[Flashlight] init: Error!\n");
+        return 0;
+    }
+}
+
+static void __exit flashlight_exit(void)
+{
+    device_remove_file(flashlight_dev, &dev_attr_brightness);
+    device_unregister(flashlight_dev);
+    if(flashlight_class!=NULL)
+        class_destroy(flashlight_class);
+}
+
+
+module_init(flashlight_init);
+module_exit(flashlight_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("MhDzMR");
+MODULE_DESCRIPTION("MTK Flashlight Filesystem Driver");
