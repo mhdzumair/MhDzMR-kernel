@@ -21,12 +21,12 @@ echo  "*****************************************************"
 echo  "$purple Script create by MhDzuMAiR "
 echo "$purple
 
-  ███╗   ███╗██╗  ██╗██████╗ ███████╗███╗   ███╗██████╗     
-  ████╗ ████║██║  ██║██╔══██╗╚══███╔╝████╗ ████║██╔══██╗    
-  ██╔████╔██║███████║██║  ██║  ███╔╝ ██╔████╔██║██████╔╝    
-  ██║╚██╔╝██║██╔══██║██║  ██║ ███╔╝  ██║╚██╔╝██║██╔══██╗    
-  ██║ ╚═╝ ██║██║  ██║██████╔╝███████╗██║ ╚═╝ ██║██║  ██║    
-  ╚═╝     ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝    
+  ███╗   ███╗██╗  ██╗██████╗ ███████╗███╗   ███╗██████╗
+  ████╗ ████║██║  ██║██╔══██╗╚══███╔╝████╗ ████║██╔══██╗
+  ██╔████╔██║███████║██║  ██║  ███╔╝ ██╔████╔██║██████╔╝
+  ██║╚██╔╝██║██╔══██║██║  ██║ ███╔╝  ██║╚██╔╝██║██╔══██╗
+  ██║ ╚═╝ ██║██║  ██║██████╔╝███████╗██║ ╚═╝ ██║██║  ██║
+  ╚═╝     ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝     ╚═╝╚═╝  ╚═╝
 "
 echo  "$yellow ________________________________________________________ "
 echo  "$blue*****************************************************"
@@ -35,7 +35,7 @@ echo  "*****************************************************$nocol"
 
 check_dir() {
 #make kernel compiling dir...
-if ! [ -f $out ];
+if ! [ -d $out ];
 then
 echo "$green create out dir fresh"
 mkdir -p out
@@ -49,6 +49,7 @@ export ARCH_MTK_PLATFORM=mt6735
 export CROSS_COMPILE=$KERNEL_DIR/gcc-linaro-7.5.0-2019.12-x86_64_arm-eabi/bin/arm-eabi-
 export KBUILD_BUILD_USER="CheRRy"
 export KBUILD_BUILD_HOST="JiLeBi"
+export CONFIG_MODULES="n"
 #clean the build
 make clean mrproper
 #defconfig
@@ -63,12 +64,18 @@ echo "$blue***********************************************"
 echo "          Compiling MhDzMR™.anDroid Kernel...          "
 echo "***********************************************$nocol"
 echo ""
+#delete the exist image
+if [ -f $ZIMAGE ]
+then
+  echo -e "\n Deleting existing zImage in out dir \n"
+  rm $ZIMAGE
+fi
 #start compile
 make -j8 -C $PWD O=out ARCH=arm
 if ! [ -f $ZIMAGE ];
 then
 echo "$red Kernel Compilation failed! Fix the errors! $nocol"
-exit 1
+exit
 fi
 }
 
@@ -93,7 +100,10 @@ fi
 echo "$yellow Copying zImage-dtb to outdir/Anykernel3 $nocol"
 cp out/arch/arm/boot/zImage-dtb outdir/AnyKernel3/
 echo "$green Copying modules to specific Dir $nocol"
-find -iname '*.ko' -exec cp {} outdir/AnyKernel3/modules/system/lib/modules/ \;
+if ['$CONFIG_MODULES'=="y"]
+then
+  find -iname '*.ko' -exec cp {} outdir/AnyKernel3/modules/system/lib/modules/ \;
+fi
 
 #using AnyKernel3 templete
 cd outdir/AnyKernel3
@@ -105,7 +115,7 @@ echo "" "Done Making Recovery Flashable Zip"
 echo ""
 echo ""
 echo "Locate MhDzMR™.anDroid Kernel in the following path : "
-echo "outdir/Anykernel3" 
+echo "outdir/Anykernel3"
 echo ""
 echo  "$blue***********************************************"
 echo "      MhDzMR™.anDroid Kernel "
