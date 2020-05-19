@@ -18,7 +18,7 @@
 #include "ddp_drv.h"
 #include "primary_display.h"
 
-#define MAX_LUT_SCALE 256
+#define MAX_LUT_SCALE 255
 #define PROGRESSION_SCALE 128
 static u32 mtk_disp_ld_r = MAX_LUT_SCALE;
 static u32 mtk_disp_ld_g = MAX_LUT_SCALE;
@@ -139,4 +139,3 @@ late_initcall(kcal_ctrl_init);
 module_exit(kcal_ctrl_exit);
 
 MODULE_DESCRIPTION("MTK KCAL PCC Interface Driver");
-
