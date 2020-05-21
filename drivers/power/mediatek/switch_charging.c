@@ -65,6 +65,10 @@
 #include <linux/fastcharge.h>
 #endif
 
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+#include "thundercharge_control.h"
+#endif
+
 /* ============================================================ // */
 /* define */
 /* ============================================================ // */
@@ -504,7 +508,7 @@ unsigned int set_bat_charging_current_limit(int current_limit)
 {
 	CHR_CURRENT_ENUM chr_type_ichg = 0;
 	CHR_CURRENT_ENUM chr_type_aicr = 0;
-	
+
 	//zhangchao@wind-mobi.com 20161202 begin
 	#ifndef CONFIG_WIND_THREMAL_CURRENT
         return 0;
@@ -760,11 +764,15 @@ void select_charging_current(void)
 			}
 #else
 			{
-#ifdef CONFIG_FORCE_FAST_CHARGE
+/* if force_fast_charge enable than no need to set the value by ThunderCharge control*/
+#if defined(CONFIG_FORCE_FAST_CHARGE) || defined(CONFIG_THUNDERCHARGE_CONTROL)
  				if (force_fast_charge) {
  					g_temp_input_CC_value = CHARGE_CURRENT_1000_00_MA;
  					g_temp_CC_value = CHARGE_CURRENT_1000_00_MA;
- 				} else {
+ 				} else if(mswitch){
+          g_temp_input_CC_value = custom_usb_current;
+          g_temp_CC_value = custom_usb_current;
+        } else {
 #endif
  					g_temp_input_CC_value = batt_cust_data.usb_charger_current;
  					g_temp_CC_value = batt_cust_data.usb_charger_current;
@@ -774,16 +782,26 @@ void select_charging_current(void)
 			}
 #endif
 		} else if (BMT_status.charger_type == NONSTANDARD_CHARGER) {
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+			g_temp_input_CC_value = custom_ac_current;
+      g_temp_CC_value = custom_ac_current;
+#else
 			g_temp_input_CC_value = batt_cust_data.non_std_ac_charger_current;
 			g_temp_CC_value = batt_cust_data.non_std_ac_charger_current;
+#endif
 
 		} else if (BMT_status.charger_type == STANDARD_CHARGER) {
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+			g_temp_input_CC_value = custom_ac_current;
+      g_temp_CC_value = custom_ac_current;
+#else
 			if (batt_cust_data.ac_charger_input_current != 0)
 				g_temp_input_CC_value = batt_cust_data.ac_charger_input_current;
 			else
 				g_temp_input_CC_value = batt_cust_data.ac_charger_current;
 
 			g_temp_CC_value = batt_cust_data.ac_charger_current;
+#endif
 			mtk_pep_set_charging_current(&g_temp_CC_value, &g_temp_input_CC_value);
 			mtk_pep20_set_charging_current(&g_temp_CC_value, &g_temp_input_CC_value);
 
@@ -875,9 +893,9 @@ void select_charging_current_bcct(void)
 #else
 #ifdef CONFIG_LCT_CHR_JEITA_STANDARD_SUPPORT //add by longcheer_liml_2017_07_20
 	if (g_bcct_flag == 1)
-	{ 
-	    if(BMT_status.charger_type == STANDARD_CHARGER) 
-	    { 
+	{
+	    if(BMT_status.charger_type == STANDARD_CHARGER)
+	    {
 	        if(lcm_suspend_flag ==1)
 	        {
 	            g_temp_CC_value = batt_cust_data.ac_charger_current;
@@ -886,12 +904,12 @@ void select_charging_current_bcct(void)
 	        }
         }else{
             g_temp_CC_value = g_bcct_value * 100;
-        }	          
-	}		
+        }
+	}
 	if (g_bcct_input_flag == 1)
 	{
-		if(BMT_status.charger_type == STANDARD_CHARGER) 
-	    { 
+		if(BMT_status.charger_type == STANDARD_CHARGER)
+	    {
 	        if(lcm_suspend_flag ==1)
 	        {
 	            g_temp_input_CC_value = batt_cust_data.ac_charger_input_current;
@@ -905,7 +923,7 @@ void select_charging_current_bcct(void)
 	printk("~~liml_chg lcm_suspend_flag=%d,g_temp_input_CC_value=%d,g_temp_CC_value=%d\n",lcm_suspend_flag,g_temp_input_CC_value,g_temp_CC_value);
 #else
 	if (g_bcct_flag == 1)
-	    g_temp_CC_value = g_bcct_value * 100;		
+	    g_temp_CC_value = g_bcct_value * 100;
 	if (g_bcct_input_flag == 1)
 	    g_temp_input_CC_value = g_bcct_input_value * 100;
 #endif
@@ -1256,7 +1274,7 @@ PMU_STATUS BAT_BatteryHoldAction(void)
 }
 
 //zhangchao@wind-mobi.com 20161128 begin
-#ifdef CONFIG_WIND_BATTERY_MODIFY 
+#ifdef CONFIG_WIND_BATTERY_MODIFY
 extern unsigned int g_batt_temp_status ;
 #endif
 //zhangchao@wind-mobi.com 20161128 end
@@ -1295,7 +1313,7 @@ PMU_STATUS BAT_BatteryStatusFailAction(void)
 	#ifdef CONFIG_WIND_BATTERY_MODIFY
 	BMT_status.charger_vol=battery_meter_get_charger_voltage();
 	if((BMT_status.charger_vol < ( batt_cust_data.v_charger_max-300))&&(BMT_status.charger_protect_status == charger_OVER_VOL)&&(g_batt_temp_status ==TEMP_POS_NORMAL))
-	{			
+	{
 		BMT_status.bat_charging_state = CHR_CC;
 		charging_enable = KAL_TRUE;
 		BMT_status.charger_protect_status = 0;
@@ -1306,7 +1324,7 @@ PMU_STATUS BAT_BatteryStatusFailAction(void)
 		charging_enable = KAL_TRUE;
 		BMT_status.charger_protect_status = 0;
 	}
-	else 
+	else
 	{
 		charging_enable = KAL_FALSE;
 	}

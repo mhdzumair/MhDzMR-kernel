@@ -35,13 +35,13 @@ config WIND_BATTERY_MODIFY
 	help
 	  Say Y here to enable debugging messages for wind battery
 	  and drivers.
-	  
+
 config WIND_Z168_TEST
 	bool "Wind Z168 battery test"
 	help
 	  Say Y here to enable debugging messages for wind battery
 	  and drivers.
-	  
+
 config WIND_Z168_DEF_NO
 	bool "Wind Z168 battery for user"
 	help
@@ -55,7 +55,7 @@ config WIND_THREMAL_CURRENT
 	help
 		Say Y here to use wind code
 # zhangchao@wind-mobi.com 20161202 end
-		
+
 config PDA_POWER
 	tristate "Generic PDA/phone power driver"
 	depends on !S390
@@ -431,6 +431,12 @@ config AB8500_BM
 	help
 	  Say Y to include support for AB8500 battery management.
 
+config THUNDERCHARGE_CONTROL
+	bool "Enable ThunderCharge Current Controlling mechanism"
+	depends on MTK_SMART_BATTERY
+	help
+	 Say Y here to enable ability to adjust charger current
+	 
 config BATTERY_GOLDFISH
 	tristate "Goldfish battery driver"
 	depends on GOLDFISH || COMPILE_TEST
