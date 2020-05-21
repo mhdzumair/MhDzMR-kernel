@@ -26,6 +26,10 @@
 #include <linux/wakelock.h>
 #endif
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+
 /* add for fix resume issue end */
 
 #include <cust_alsps.h>

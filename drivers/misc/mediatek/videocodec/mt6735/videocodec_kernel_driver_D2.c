@@ -46,6 +46,10 @@
 /* #include <mach/diso.h> */
 #endif
 
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
+
 #include "videocodec_kernel_driver.h"
 #include "../videocodec_kernel.h"
 #include <asm/cacheflush.h>

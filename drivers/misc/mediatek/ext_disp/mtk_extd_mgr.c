@@ -37,7 +37,9 @@
 #include "extd_factory.h"
 #include "mtk_extd_mgr.h"
 #include <linux/suspend.h>
-
+#ifdef CONFIG_HAS_EARLYSUSPEND
+#include <linux/earlysuspend.h>
+#endif
 
 #define EXTD_DEVNAME "hdmitx"
 #define EXTD_DEV_ID(id) (((id)>>16)&0x0ff)
@@ -437,8 +439,8 @@ static struct platform_driver external_display_driver = {
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void extd_early_suspend(struct early_suspend *h)
 {
-	EXT_MGR_FUNC();
 	int i = 0;
+	EXT_MGR_FUNC();
 
 	for (i = DEV_MHL; i < DEV_MAX_NUM - 1; i++) {
 		if (i != DEV_EINK && extd_driver[i]->power_enable)
@@ -448,8 +450,8 @@ static void extd_early_suspend(struct early_suspend *h)
 
 static void extd_late_resume(struct early_suspend *h)
 {
-	EXT_MGR_FUNC();
 	int i = 0;
+	EXT_MGR_FUNC();
 
 	for (i = DEV_MHL; i < DEV_MAX_NUM - 1; i++) {
 		if (i != DEV_EINK && extd_driver[i]->power_enable)

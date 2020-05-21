@@ -21,7 +21,9 @@
 #include <linux/delay.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
-//#include <linux/earlysuspend.h>
+#if defined(CONFIG_HAS_EARLYSUSPEND)
+#include <linux/earlysuspend.h>
+#endif
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
 //#include <linux/hwmsen_helper.h>
