@@ -92,7 +92,7 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
-
+ATOMIC_NOTIFIER_HEAD(migration_notifier_head);
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
 {
@@ -1571,6 +1571,9 @@ static void ttwu_activate(struct rq *rq, struct task_struct *p, int en_flags)
 		wq_worker_waking_up(p, cpu_of(rq));
 }
 
+/* Window size (in ns) */
+__read_mostly unsigned int sched_ravg_window = 10000000;
+
 /*
  * Mark the task runnable and perform wakeup-preemption.
  */
@@ -1773,6 +1776,8 @@ static void ttwu_queue(struct task_struct *p, int cpu)
 	raw_spin_unlock(&rq->lock);
 }
 
+__read_mostly unsigned int sysctl_sched_wakeup_load_threshold = 110;
+
 /**
  * try_to_wake_up - wake up a thread
  * @p: the thread to be awakened
@@ -1792,7 +1797,9 @@ static int
 try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 {
 	unsigned long flags;
-	int cpu, success = 0;
+	int cpu, src_cpu, success = 0;
+	int notify = 0;
+	struct migration_notify_data mnd;
 
 	/*
 	 * If we are going to wake up a thread waiting for CONDITION we
@@ -1806,7 +1813,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		goto out;
 
 	success = 1; /* we're going to change ->state */
-	cpu = task_cpu(p);
+	src_cpu = cpu = task_cpu(p);
 
 	if (p->on_rq && ttwu_remote(p, wake_flags))
 		goto stat;
@@ -1830,7 +1837,8 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		p->sched_class->task_waking(p);
 
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags);
-	if (task_cpu(p) != cpu) {
+	src_cpu = task_cpu(p);
+	if (src_cpu != cpu) {
 		wake_flags |= WF_MIGRATED;
 		set_task_cpu(p, cpu);
 	}
@@ -1839,8 +1847,32 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	ttwu_queue(p, cpu);
 stat:
 	ttwu_stat(p, cpu, wake_flags);
+
+#ifndef CONFIG_UML
+	if (task_notify_on_migrate(p)) {
+                mnd.src_cpu = src_cpu;
+                mnd.dest_cpu = cpu;
+                mnd.load = pct_task_load(p);
+
+                /*
+                 * Call the migration notifier with mnd for foreground task
+                 * migrations as well as for wakeups if their load is above
+                 * sysctl_sched_wakeup_load_threshold. This would prompt the
+                 * cpu-boost to boost the CPU frequency on wake up of a heavy
+                 * weight foreground task
+                 */
+                if ((src_cpu != cpu) || (mnd.load >
+                                        sysctl_sched_wakeup_load_threshold))
+			notify = 1;
+        }
+#endif
+
 out:
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
+
+	if (notify)
+	atomic_notifier_call_chain(&migration_notifier_head,
+																				 0, (void *)&mnd);
 
 	return success;
 }
@@ -5066,6 +5098,7 @@ EXPORT_SYMBOL_GPL(set_cpus_allowed_ptr);
 static int __migrate_task(struct task_struct *p, int src_cpu, int dest_cpu)
 {
 	struct rq *rq;
+	bool moved = false;
 	int ret = 0;
 
 	if (unlikely(!cpu_active(dest_cpu)))
@@ -5089,11 +5122,21 @@ static int __migrate_task(struct task_struct *p, int src_cpu, int dest_cpu)
 	 */
 	if (task_on_rq_queued(p))
 		rq = move_queued_task(p, dest_cpu);
+		moved = true;
 done:
 	ret = 1;
 fail:
 	raw_spin_unlock(&rq->lock);
 	raw_spin_unlock(&p->pi_lock);
+	if (moved && task_notify_on_migrate(p)) {
+	struct migration_notify_data mnd;
+
+	mnd.src_cpu = src_cpu;
+	mnd.dest_cpu = dest_cpu;
+	mnd.load = pct_task_load(p);
+	atomic_notifier_call_chain(&migration_notifier_head,
+					 0, (void *)&mnd);
+	}
 	return ret;
 }
 
