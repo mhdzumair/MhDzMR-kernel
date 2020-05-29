@@ -30,6 +30,11 @@ config WAKELOCK
 
 	  Say Y if you are running an android userspace.
 
+config	BOEFFLA_WL_BLOCKER
+		bool "Boeffla generic wakelock blocker driver"
+		depends on PM
+		default N
+
 config POWERSUSPEND
 	bool "Power suspend"
 	default n
@@ -45,7 +50,7 @@ config EARLYSUSPEND
 	---help---
 	  Call early suspend handlers when the user requested sleep state
 	  changes.
-		
+
 config HIBERNATE_CALLBACKS
 	bool
 
