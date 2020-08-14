@@ -54,6 +54,10 @@
 #define MIN_CPU_UP_TIME              (750)
 #define TOUCH_BOOST_ENABLED          (1)
 
+#ifndef CONFIG_NR_CPUS
+#define CONFIG_NR_CPUS		4
+#endif
+
 static bool isSuspended = false;
 
 static int suspend_cpu_num = 2, resume_cpu_num = (NR_CPUS -1);
