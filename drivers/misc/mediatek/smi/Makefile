@@ -25,6 +25,15 @@ obj-y += smi_config_util.o
 obj-y += smi_configuration.o
 obj-y += smi_internal.o
 
+ifneq (,$(filter $(CONFIG_MTK_PLATFORM), "mt6580" "mt6735"))
+CMDQ_VER := "v2"
+else
+CMDQ_VER := "v3"
+obj-y += met/
+endif
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER)/
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/cmdq/$(CMDQ_VER)/$(CONFIG_MTK_PLATFORM)/
+
 ifeq ($(CONFIG_ARCH_MT6735),y)
 ccflags-y += -I$(srctree)/drivers/clk/mediatek
 ccflags-y += -DSMI_D1
@@ -45,7 +54,7 @@ else ifeq ($(CONFIG_ARCH_MT6797),y)
 ccflags-y += -DSMI_EV
 ccflags-y += -I$(srctree)/drivers/clk/mediatek
 obj-y += mmdvfs_mgr_v2.o
-else 
+else
 ccflags-y += -DSMI_BRINGUP
 endif
 

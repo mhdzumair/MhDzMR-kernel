@@ -30,6 +30,7 @@
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
 #include <linux/slab.h>
+#include <linux/display_state.h>
 
 #ifdef CONFIG_ARCH_MT6755
 #include "../misc/mediatek/base/power/mt6755/mt_cpufreq.h"
@@ -67,6 +68,7 @@ struct cpufreq_interactive_cpuinfo {
 	u64 loc_hispeed_val_time; /* per-cpu hispeed_validate_time */
 	struct rw_semaphore enable_sem;
 	int governor_enabled;
+	bool limits_changed;
 };
 
 static DEFINE_PER_CPU(struct cpufreq_interactive_cpuinfo, cpuinfo);
@@ -81,7 +83,8 @@ static struct mutex gov_lock;
 #define DEFAULT_TARGET_LOAD 90
 static unsigned int default_target_loads[] = {DEFAULT_TARGET_LOAD};
 
-#define DEFAULT_TIMER_RATE (20 * USEC_PER_MSEC)
+#define DEFAULT_TIMER_RATE (30 * USEC_PER_MSEC)
+#define SCREEN_OFF_TIMER_RATE ((unsigned long)(50 * USEC_PER_MSEC))
 #define DEFAULT_ABOVE_HISPEED_DELAY DEFAULT_TIMER_RATE
 static unsigned int default_above_hispeed_delay[] = {
 	DEFAULT_ABOVE_HISPEED_DELAY };
@@ -107,6 +110,7 @@ struct cpufreq_interactive_tunables {
 	 * The sample rate of the timer used to increase frequency
 	 */
 	unsigned long timer_rate;
+	unsigned long prev_timer_rate;
 	/*
 	 * Wait this long before raising speed above hispeed, by default a
 	 * single timer interval.
@@ -360,6 +364,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	unsigned int loadadjfreq;
 	unsigned int index;
 	unsigned long flags;
+	bool display_on = is_display_on();
 	u64 max_fvtime;
 
 #if (defined CONFIG_ARCH_MT6755) || (defined CONFIG_ARCH_MT6797)
@@ -386,6 +391,13 @@ static void cpufreq_interactive_timer(unsigned long data)
 
 	if (WARN_ON_ONCE(!delta_time))
 		goto rearm;
+
+	if (display_on && tunables->timer_rate != tunables->prev_timer_rate)
+		tunables->timer_rate = tunables->prev_timer_rate;
+	else if (!display_on && tunables->timer_rate != SCREEN_OFF_TIMER_RATE) {
+		tunables->prev_timer_rate = tunables->timer_rate;
+		tunables->timer_rate = max(tunables->timer_rate, SCREEN_OFF_TIMER_RATE);
+	}
 
 	spin_lock_irqsave(&pcpu->target_freq_lock, flags);
 	do_div(cputime_speedadj, delta_time);
@@ -905,6 +917,7 @@ static ssize_t store_timer_rate(struct cpufreq_interactive_tunables *tunables,
 			val_round);
 
 	tunables->timer_rate = val_round;
+	tunables->prev_timer_rate=val_round;
 	return count;
 }
 
@@ -1198,6 +1211,7 @@ static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 		tunables->ntarget_loads = ARRAY_SIZE(default_target_loads);
 		tunables->min_sample_time = DEFAULT_MIN_SAMPLE_TIME;
 		tunables->timer_rate = DEFAULT_TIMER_RATE;
+		tunables->prev_timer_rate = DEFAULT_TIMER_RATE;
 		tunables->boostpulse_duration_val = DEFAULT_MIN_SAMPLE_TIME;
 		tunables->timer_slack_val = DEFAULT_TIMER_SLACK;
 

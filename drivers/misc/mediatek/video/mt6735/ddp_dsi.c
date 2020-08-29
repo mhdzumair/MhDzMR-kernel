@@ -258,6 +258,13 @@ static int dsi_currect_mode;
 
 static int dsi_force_config;
 
+static bool display_on;
+
+bool is_display_on(void)
+{
+	return display_on;
+}
+
 static void _DSI_INTERNAL_IRQ_Handler(DISP_MODULE_ENUM module, unsigned int param)
 {
 	int i = 0;
@@ -2973,6 +2980,7 @@ int ddp_dsi_init(DISP_MODULE_ENUM module, void *cmdq)
 	{
 #endif
 		s_isDsiPowerOn = true;
+		display_on = true;
 #ifdef ENABLE_CLK_MGR
 #ifndef CONFIG_MTK_CLKMGR
 		ddp_set_mipi26m(1);
@@ -3683,6 +3691,7 @@ int ddp_dsi_power_on(DISP_MODULE_ENUM module, void *cmdq_handle)
 
 			}
 			s_isDsiPowerOn = true;
+			display_on = true;
 			DISPMSG("ipoh dsi power on return\n");
 			return DSI_STATUS_OK;
 		}
@@ -3756,6 +3765,7 @@ int ddp_dsi_power_on(DISP_MODULE_ENUM module, void *cmdq_handle)
 		}
 #endif
 		s_isDsiPowerOn = true;
+		display_on = true;
 	}
 	/* DSI_DumpRegisters(module,1); */
 	return DSI_STATUS_OK;
@@ -3838,6 +3848,7 @@ int ddp_dsi_power_off(DISP_MODULE_ENUM module, void *cmdq_handle)
 #endif
 #endif
 		s_isDsiPowerOn = false;
+		display_on = false;
 	}
 	/* DSI_DumpRegisters(module,1); */
 	return DSI_STATUS_OK;

@@ -1314,7 +1314,7 @@ static bool dm_table_supports_flush(struct dm_table *t, unsigned long flush)
 			return 1;
 
 		if (ti->type->iterate_devices &&
-		    ti->type->iterate_devices(ti, device_flush_capable, (void *) flush))        
+		    ti->type->iterate_devices(ti, device_flush_capable, (void *) flush))
 			return 1;
 	}
 
@@ -1445,7 +1445,6 @@ static bool dm_table_supports_discards(struct dm_table *t)
 void dm_table_set_restrictions(struct dm_table *t, struct request_queue *q,
 			       struct queue_limits *limits)
 {
-	unsigned flush = 0;
     bool wc = false, fua = false;
 	/*
 	 * Copy table's limits to the DM device's request_queue
@@ -1653,4 +1652,3 @@ void dm_table_run_md_queue_async(struct dm_table *t)
 	}
 }
 EXPORT_SYMBOL(dm_table_run_md_queue_async);
-
